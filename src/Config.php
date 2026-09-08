@@ -15,6 +15,9 @@ final class Config
         public readonly string $customerCode,
         public readonly string $customerRoot,
         public readonly string $engineRoot = __DIR__ . '/..',
+        public readonly string $adminUser = 'admin',
+        public readonly string $adminPasswordHash = '',
+        public readonly string $sessionSecret = '',
     ) {
     }
 

@@ -15,6 +15,10 @@ $factory = require __DIR__ . '/../bootstrap.php';
 $app = $factory(new AtomTool\Config(
     customerCode: 'dev',
     customerRoot: __DIR__ . '/..',
+    // Dev credentials: user "admin", password "dev".
+    adminUser: 'admin',
+    adminPasswordHash: '$2y$12$ibF9WWMLTofDLXZPhOTV4ecTyl8Swtr9ATprLy00FWrKc3B/O1QDO',
+    sessionSecret: 'dev-secret-not-for-production',
 ));
 
 $app->run();

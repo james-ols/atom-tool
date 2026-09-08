@@ -1,0 +1,1 @@
+// AtoM Tool — client-side behaviour. Deliberately empty for now.
