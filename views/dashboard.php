@@ -138,7 +138,7 @@ ob_start();
                             <td class="size text-muted"><?= htmlspecialchars($formatSize($f->sizeBytes), ENT_QUOTES, 'UTF-8') ?></td>
                             <td class="run-date text-muted">—</td>
                             <td class="pipeline">
-                                <select class="form-select form-select-sm pipeline-select">
+                                <select class="form-select pipeline-select">
                                     <option value="">Select a pipeline…</option>
                                     <?php foreach ($pipelines as $p): ?>
                                         <option value="<?= htmlspecialchars($p['key'], ENT_QUOTES, 'UTF-8') ?>">
