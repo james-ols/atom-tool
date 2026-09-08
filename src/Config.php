@@ -18,6 +18,7 @@ final class Config
         public readonly string $adminUser = 'admin',
         public readonly string $adminPasswordHash = '',
         public readonly string $sessionSecret = '',
+        public readonly ?string $storageRoot = null,
     ) {
     }
 
@@ -51,5 +52,14 @@ final class Config
     public function engineRoot(): string
     {
         return $this->engineRoot;
+    }
+
+    /**
+     * Absolute path to the per-customer storage root.
+     * Defaults to <customerRoot>/storage if not overridden.
+     */
+    public function storageRoot(): string
+    {
+        return $this->storageRoot ?? $this->customerRoot . '/storage';
     }
 }
