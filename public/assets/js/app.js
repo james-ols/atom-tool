@@ -5,9 +5,11 @@
     const table = document.getElementById('files-table');
     const btnRun = document.getElementById('btn-run');
     const btnClear = document.getElementById('btn-clear');
+    const runName = document.getElementById('run-name');
+    const runPipeline = document.getElementById('run-pipeline');
     const deleteName = document.getElementById('delete-name');
 
-    if (!table || !btnRun || !btnClear || !deleteName) {
+    if (!table || !btnRun || !btnClear || !runName || !runPipeline || !deleteName) {
         return;
     }
 
@@ -16,29 +18,31 @@
         return radio ? radio.closest('tr') : null;
     }
 
-    function selectedPipeline(row) {
+    function pipelineFor(row) {
         if (!row) return '';
         const sel = row.querySelector('.pipeline-select');
-        return sel && !sel.disabled ? sel.value : '';
+        return sel ? sel.value : '';
     }
 
     function refresh() {
         const row = selectedRow();
         const name = row ? row.dataset.filename : '';
-        const pipeline = selectedPipeline(row);
+        const pipeline = pipelineFor(row);
 
+        // Clear: enabled when a row is selected.
         btnClear.disabled = !row;
         deleteName.value = name;
 
-        // Run needs both a selected row and a chosen pipeline.
-        // Pipeline dropdown is disabled for now (Step 5c will enable it), so
-        // btnRun stays disabled until then.
-        btnRun.disabled = !row || pipeline === '' || pipeline === 'Select a pipeline…';
+        // Run: enabled when a row is selected AND its pipeline is chosen.
+        btnRun.disabled = !row || pipeline === '';
+        runName.value = name;
+        runPipeline.value = pipeline;
     }
 
-    // Radio selection changes → refresh action buttons.
+    // Radio change or pipeline change → refresh.
     table.addEventListener('change', function (e) {
-        if (e.target && (e.target.name === 'selected_file' || e.target.classList.contains('pipeline-select'))) {
+        if (!e.target) return;
+        if (e.target.name === 'selected_file' || e.target.classList.contains('pipeline-select')) {
             refresh();
         }
     });

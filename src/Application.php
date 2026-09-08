@@ -124,8 +124,6 @@ final class Application
 
             $this->storage->delete(Storage::AREA_UPLOADS, $name);
 
-            // Also drop any generated output / report tied to this upload
-            // (matched by shared basename without extension).
             $base = pathinfo($name, PATHINFO_FILENAME);
             foreach ($this->storage->list(Storage::AREA_OUTPUTS) as $out) {
                 if (pathinfo($out->name, PATHINFO_FILENAME) === $base) {
@@ -138,6 +136,23 @@ final class Application
                 }
             }
 
+            return Response::redirect('/');
+        }));
+
+        // Stub: real transformation lands in Step 7 (streams parser + mapping).
+        // For now, verify the file exists and the pipeline is known, then redirect.
+        $router->post('/run', $requireAuth(function (Request $request, Session $session): Response {
+            $name = (string) $request->postParam('name', '');
+            $pipeline = (string) $request->postParam('pipeline', '');
+
+            if ($name === '' || $pipeline === '') {
+                return Response::redirect('/');
+            }
+            if ($this->storage->get(Storage::AREA_UPLOADS, $name) === null) {
+                return Response::redirect('/');
+            }
+            // TODO Step 7: dispatch to PipelineRegistry, stream the XML,
+            // write outputs/<base>.csv and reports/<base>.json.
             return Response::redirect('/');
         }));
 

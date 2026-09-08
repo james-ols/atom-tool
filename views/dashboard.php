@@ -90,9 +90,13 @@ ob_start();
                 </label>
             </form>
 
-            <button type="button" id="btn-run" class="btn btn-outline-secondary" disabled>
-                <span class="material-symbols-rounded">play_arrow</span> Run
-            </button>
+            <form method="post" action="/run" id="form-run" class="d-inline-block">
+                <input type="hidden" name="name" id="run-name" value="">
+                <input type="hidden" name="pipeline" id="run-pipeline" value="">
+                <button type="submit" id="btn-run" class="btn btn-outline-secondary" disabled>
+                    <span class="material-symbols-rounded">play_arrow</span> Run
+                </button>
+            </form>
 
             <form method="post" action="/delete" id="form-delete" class="d-inline-block"
                   onsubmit="return confirm('Delete the selected file and any generated output for it?');">
@@ -134,8 +138,8 @@ ob_start();
                             <td class="size text-muted"><?= htmlspecialchars($formatSize($f->sizeBytes), ENT_QUOTES, 'UTF-8') ?></td>
                             <td class="run-date text-muted">—</td>
                             <td class="pipeline">
-                                <select class="form-select form-select-sm pipeline-select" disabled>
-                                    <option>Select a pipeline…</option>
+                                <select class="form-select form-select-sm pipeline-select">
+                                    <option value="">Select a pipeline…</option>
                                     <?php foreach ($pipelines as $p): ?>
                                         <option value="<?= htmlspecialchars($p['key'], ENT_QUOTES, 'UTF-8') ?>">
                                             <?= htmlspecialchars($p['label'], ENT_QUOTES, 'UTF-8') ?>
