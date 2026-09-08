@@ -74,22 +74,11 @@ final class Application
 
         $router->get('/', $requireAuth(function (Request $request, Session $session): Response {
             $version = trim((string) @file_get_contents($this->config->engineRoot() . '/VERSION'));
-            $customer = htmlspecialchars($this->config->customerCode, ENT_QUOTES, 'UTF-8');
-            $user = htmlspecialchars((string) $session->username(), ENT_QUOTES, 'UTF-8');
-
-            return Response::html(<<<HTML
-            <!doctype html>
-            <html lang="en">
-            <head><meta charset="utf-8"><title>AtoM Tool</title></head>
-            <body style="font-family: sans-serif; padding: 2rem;">
-              <h1>AtoM Tool — signed in</h1>
-              <p>Engine version: <strong>{$version}</strong></p>
-              <p>Customer: <strong>{$customer}</strong></p>
-              <p>User: <strong>{$user}</strong></p>
-              <p><a href="/logout">Sign out</a></p>
-            </body>
-            </html>
-            HTML);
+            return Response::html($this->render('dashboard', [
+                'username' => (string) $session->username(),
+                'customerCode' => $this->config->customerCode,
+                'engineVersion' => $version,
+            ]));
         }));
 
         return $router;
