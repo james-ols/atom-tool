@@ -7,6 +7,8 @@ use AtomTool\Auth\Session;
 use AtomTool\Http\Request;
 use AtomTool\Http\Response;
 use AtomTool\Http\Router;
+use AtomTool\Storage\LocalStorage;
+use AtomTool\Storage\Storage;
 
 /**
  * Top-level engine facade. Builds the Router, dispatches the current Request,
@@ -14,9 +16,12 @@ use AtomTool\Http\Router;
  */
 final class Application
 {
+    private Storage $storage;
+
     public function __construct(
         private readonly Config $config,
     ) {
+        $this->storage = new LocalStorage($this->config->storageRoot());
     }
 
     public function run(): void
@@ -75,10 +80,65 @@ final class Application
         $router->get('/', $requireAuth(function (Request $request, Session $session): Response {
             $version = trim((string) @file_get_contents($this->config->engineRoot() . '/VERSION'));
             return Response::html($this->render('dashboard', [
-                'username' => (string) $session->username(),
-                'customerCode' => $this->config->customerCode,
+                'username'      => (string) $session->username(),
+                'customerCode'  => $this->config->customerCode,
                 'engineVersion' => $version,
+                'files'         => $this->storage->list(Storage::AREA_UPLOADS),
             ]));
+        }));
+
+        $router->post('/upload', $requireAuth(function (Request $request, Session $session): Response {
+            $file = $request->files['calm_file'] ?? null;
+            if (!is_array($file) || ($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
+                return Response::redirect('/');
+            }
+
+            $name = (string) ($file['name'] ?? '');
+            $tmp  = (string) ($file['tmp_name'] ?? '');
+            if (!is_uploaded_file($tmp)) {
+                return Response::redirect('/');
+            }
+
+            if (strtolower((string) pathinfo($name, PATHINFO_EXTENSION)) !== 'xml') {
+                return Response::redirect('/');
+            }
+
+            $handle = fopen($tmp, 'rb');
+            if ($handle === false) {
+                return Response::redirect('/');
+            }
+            try {
+                $this->storage->storeStream(Storage::AREA_UPLOADS, $name, $handle);
+            } finally {
+                fclose($handle);
+            }
+
+            return Response::redirect('/');
+        }));
+
+        $router->post('/delete', $requireAuth(function (Request $request, Session $session): Response {
+            $name = (string) $request->postParam('name', '');
+            if ($name === '') {
+                return Response::redirect('/');
+            }
+
+            $this->storage->delete(Storage::AREA_UPLOADS, $name);
+
+            // Also drop any generated output / report tied to this upload
+            // (matched by shared basename without extension).
+            $base = pathinfo($name, PATHINFO_FILENAME);
+            foreach ($this->storage->list(Storage::AREA_OUTPUTS) as $out) {
+                if (pathinfo($out->name, PATHINFO_FILENAME) === $base) {
+                    $this->storage->delete(Storage::AREA_OUTPUTS, $out->name);
+                }
+            }
+            foreach ($this->storage->list(Storage::AREA_REPORTS) as $rep) {
+                if (pathinfo($rep->name, PATHINFO_FILENAME) === $base) {
+                    $this->storage->delete(Storage::AREA_REPORTS, $rep->name);
+                }
+            }
+
+            return Response::redirect('/');
         }));
 
         return $router;

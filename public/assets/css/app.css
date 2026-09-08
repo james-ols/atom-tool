@@ -267,6 +267,22 @@ body {
 }
 .app-centre__table .col-select { width: 40px; }
 .app-centre__table .col-icon   { width: 44px; text-align: center; }
+.app-centre__table td.filename {
+    font-weight: 500;
+    word-break: break-all;
+}
+.app-centre__table td.size,
+.app-centre__table td.run-date {
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+}
+.app-centre__table td.pipeline {
+    min-width: 200px;
+}
+.app-centre__table td.col-icon .material-symbols-rounded {
+    font-size: 22px;
+    vertical-align: middle;
+}
 .app-centre__footer {
     margin-top: auto;
     padding-top: 0.5rem;

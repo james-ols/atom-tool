@@ -3,27 +3,45 @@
  * Main dashboard.
  *
  * Expected variables:
- *   string $username        Logged-in username.
- *   string $customerCode    Customer code (e.g. "gb166", "dev").
- *   string $engineVersion   Engine version string.
+ *   string $username         Logged-in username.
+ *   string $customerCode     Customer code (e.g. "gb166", "dev").
+ *   string $engineVersion    Engine version string.
+ *   list<StoredFile> $files  Uploaded CALM files, most-recent first.
  */
 declare(strict_types=1);
+
+use AtomTool\Storage\StoredFile;
 
 /** @var string $username */
 /** @var string $customerCode */
 /** @var string $engineVersion */
+/** @var list<StoredFile> $files */
 
 $title = 'Dashboard';
 $bodyClass = 'dashboard-body';
 
 $pipelines = [
-    ['key' => 'description',     'icon' => 'description',     'label' => 'Description'],
-    ['key' => 'accession',       'icon' => 'inventory_2',     'label' => 'Accession'],
-    ['key' => 'authority',       'icon' => 'person',          'label' => 'Authority Record'],
-    ['key' => 'authority_rel',   'icon' => 'hub',             'label' => 'Authority Record Relationships'],
-    ['key' => 'events',          'icon' => 'event',           'label' => 'Events'],
-    ['key' => 'institutions',    'icon' => 'account_balance', 'label' => 'Archival Institutions'],
+    ['key' => 'description',   'icon' => 'description',     'label' => 'Description'],
+    ['key' => 'accession',     'icon' => 'inventory_2',     'label' => 'Accession'],
+    ['key' => 'authority',     'icon' => 'person',          'label' => 'Authority Record'],
+    ['key' => 'authority_rel', 'icon' => 'hub',             'label' => 'Authority Record Relationships'],
+    ['key' => 'events',        'icon' => 'event',           'label' => 'Events'],
+    ['key' => 'institutions',  'icon' => 'account_balance', 'label' => 'Archival Institutions'],
 ];
+
+$formatSize = static function (int $bytes): string {
+    if ($bytes < 1024) {
+        return $bytes . ' B';
+    }
+    $units = ['KB', 'MB', 'GB', 'TB'];
+    $value = $bytes / 1024;
+    $i = 0;
+    while ($value >= 1024 && $i < count($units) - 1) {
+        $value /= 1024;
+        $i++;
+    }
+    return number_format($value, $value >= 10 ? 0 : 1) . ' ' . $units[$i];
+};
 
 ob_start();
 ?>
@@ -34,7 +52,7 @@ ob_start();
             <img src="/assets/img/logo.png" alt="" class="app-topbar__logo">
             <span class="app-topbar__wordmark">
                 <strong>AtoM Tool</strong>
-                <span class="app-topbar__by">by Orangeleaf Systems</span>
+                <span class="app-topbar__by">by Orange Leaf Systems</span>
             </span>
         </div>
         <div class="app-topbar__user">
@@ -65,19 +83,28 @@ ob_start();
 
     <main class="app-centre">
         <div class="app-centre__actions">
-            <button type="button" class="btn btn-ols">
-                <span class="material-symbols-rounded">upload</span> Upload CALM file
-            </button>
-            <button type="button" class="btn btn-outline-secondary" disabled>
+            <form method="post" action="/upload" enctype="multipart/form-data" class="d-inline-block">
+                <label class="btn btn-ols mb-0">
+                    <span class="material-symbols-rounded">upload</span> Upload CALM file
+                    <input type="file" name="calm_file" accept=".xml,application/xml,text/xml" hidden onchange="this.form.submit()">
+                </label>
+            </form>
+
+            <button type="button" id="btn-run" class="btn btn-outline-secondary" disabled>
                 <span class="material-symbols-rounded">play_arrow</span> Run
             </button>
-            <button type="button" class="btn btn-outline-secondary" disabled>
-                <span class="material-symbols-rounded">delete</span> Clear
-            </button>
+
+            <form method="post" action="/delete" id="form-delete" class="d-inline-block"
+                  onsubmit="return confirm('Delete the selected file and any generated output for it?');">
+                <input type="hidden" name="name" id="delete-name" value="">
+                <button type="submit" id="btn-clear" class="btn btn-outline-secondary" disabled>
+                    <span class="material-symbols-rounded">delete</span> Clear
+                </button>
+            </form>
         </div>
 
         <div class="app-centre__table">
-            <table class="table align-middle">
+            <table class="table align-middle" id="files-table">
                 <thead>
                     <tr>
                         <th scope="col" class="col-select"></th>
@@ -90,11 +117,41 @@ ob_start();
                     </tr>
                 </thead>
                 <tbody>
+                <?php if ($files === []): ?>
                     <tr>
                         <td colspan="7" class="text-center text-muted py-4">
                             No files uploaded yet.
                         </td>
                     </tr>
+                <?php else: ?>
+                    <?php foreach ($files as $f): ?>
+                        <tr data-filename="<?= htmlspecialchars($f->name, ENT_QUOTES, 'UTF-8') ?>">
+                            <td class="col-select">
+                                <input type="radio" name="selected_file"
+                                       value="<?= htmlspecialchars($f->name, ENT_QUOTES, 'UTF-8') ?>">
+                            </td>
+                            <td class="filename"><?= htmlspecialchars($f->name, ENT_QUOTES, 'UTF-8') ?></td>
+                            <td class="size text-muted"><?= htmlspecialchars($formatSize($f->sizeBytes), ENT_QUOTES, 'UTF-8') ?></td>
+                            <td class="run-date text-muted">—</td>
+                            <td class="pipeline">
+                                <select class="form-select form-select-sm pipeline-select" disabled>
+                                    <option>Select a pipeline…</option>
+                                    <?php foreach ($pipelines as $p): ?>
+                                        <option value="<?= htmlspecialchars($p['key'], ENT_QUOTES, 'UTF-8') ?>">
+                                            <?= htmlspecialchars($p['label'], ENT_QUOTES, 'UTF-8') ?>
+                                        </option>
+                                    <?php endforeach; ?>
+                                </select>
+                            </td>
+                            <td class="col-icon text-center">
+                                <span class="material-symbols-rounded text-muted" title="Download (available after transformation)">download</span>
+                            </td>
+                            <td class="col-icon text-center">
+                                <span class="material-symbols-rounded text-muted" title="Preflight (available after transformation)">flight</span>
+                            </td>
+                        </tr>
+                    <?php endforeach; ?>
+                <?php endif; ?>
                 </tbody>
             </table>
         </div>
