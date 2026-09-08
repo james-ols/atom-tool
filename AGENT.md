@@ -57,3 +57,40 @@ Hovering over the icons will create a full panel overlay, over everything except
 This panel will contain an SVG live drawn image of the field mappings from CALM to ATOM.  For one to one, these are just arrows.  Where a special function has been called, this then shows the field to that function, then out to the ATOM.
 See sketch page three.
 It is slightly less important to get that working, that can be phase two. 
+
+# Mapping Notes
+
+Handover — Step 6 mapping design, unresolved
+Where we stopped: deciding the exact shape of mapping.php. Everything up to and including Step 5c is complete, committed (or ready to commit), and the app works end-to-end for upload + delete. POST /run is a stub. Storage lands at atom-tool-gb166/storage/{uploads,outputs,reports}/.
+The design premise you've established:
+You author mappings, not customers.
+mapping.php is a PHP file per pipeline (six per customer).
+Layout: atom-tool-gb166/mapping/description.php, mapping/accession.php, etc.
+Contents: PHP file returns an array; also declares customer-specific transform functions at the top.
+The static map is keyed by CALM field.
+Values are one of two shapes:
+'atomColumnName' — direct 1:1 copy.
+'gb166_functionName:atomColumnName' — through a named function.
+Multiple CALM fields can share functionName:atomColumnName — engine groups them and invokes the function once with all their values.
+Working example for GB166 Description sits in the previous message — copy it into a scratch file when you sit back down.
+Open questions for tomorrow-you
+Four things to decide before the engine can be written. In priority order:
+Function signature: Design A (positional args in map order) or Design B (whole record array)? My lean: A. Explicit contract, no hidden coupling.
+Multi-CALM-to-one-function grouping: engine collects entries with matching functionName:atomColumn value, invokes function once with concatenated arg list. Confirm this is what you want.
+One CALM field to multiple AtoM columns (rare but possible, e.g. Date → both eventDates and eventStartDates):
+Ignore for now, or
+Value can be array: 'Date' => ['eventDates', 'eventStartDates'].
+Directory layout: mapping/description.php etc., or six files at root (mapping-description.php)? My lean: subdirectory.
+What Step 6 & 7 look like once the shape is locked
+6a: Config::mappingPath(string $pipeline); delete the empty top-level mapping.php; create mapping/ subdirectory in the customer repo with description.php (the real GB166 one).
+6b: Mapping\Mapping class — loads a mapping file, exposes apply(array $record): array returning [atomColumn => value, …], and unmappedInputs(array $record): array for preflight.
+6c: Parser\CalmStreamParser — XMLReader walking DScribeRecord elements, yielding one record array at a time. Constant memory.
+6d: CSV writer — reads header row from atom_{pipeline}.csv template, uses mapping output to build each row, fputcsv to outputs/<basename>.csv.
+6e: Preflight accumulator — during the parse, tallies coverage and unmapped-fields; writes reports/<basename>.json at the end.
+7a: Wire POST /run to the real pipeline.
+7b: GET /download/{name} — download link, ⬇ icon activates when output exists.
+7c: Preflight hover (the 5d we deferred) — panel loads the JSON on hover.
+7d: Run-date column populates from output file mtime.
+Also lingering — smaller, from earlier
+Parent/child records: your sample XML has MI9861 (Collection) and MI9861/1 (Component/File). AtoM CSV import uses parentId (I think — you'll know) to build the hierarchy. Do we emit parentId derived from RefNo prefix matching? Worth explicit thought at Step 6c.
+Date normalisation: <Created>20/08/2026</Created> is DD/MM/YYYY, AtoM wants ISO. Handled as a gb166_date_iso function in the customer's mapping.php, or engine-provided? Given "no engine primitives" is the whole point of your design, probably the former.
