@@ -179,7 +179,8 @@ body {
 
 .app-banner {
     grid-area: banner;
-    background: var(--ols-orange);
+    background: var(--ols-orange) url('/assets/img/banner.jpg') center/cover no-repeat;
+    border-bottom: 1px solid var(--ols-border);
 }
 
 /* ---- Left rail ---- */
