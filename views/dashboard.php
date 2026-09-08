@@ -21,12 +21,12 @@ $title = 'Dashboard';
 $bodyClass = 'dashboard-body';
 
 $pipelines = [
-    ['key' => 'description',   'icon' => 'description',     'label' => 'Description'],
-    ['key' => 'accession',     'icon' => 'inventory_2',     'label' => 'Accession'],
-    ['key' => 'authority',     'icon' => 'person',          'label' => 'Authority Record'],
-    ['key' => 'authority_rel', 'icon' => 'hub',             'label' => 'Authority Record Relationships'],
-    ['key' => 'events',        'icon' => 'event',           'label' => 'Events'],
-    ['key' => 'institutions',  'icon' => 'account_balance', 'label' => 'Archival Institutions'],
+        ['key' => 'description',   'icon' => 'description',     'label' => 'Description',                      'version' => 'v1.2', 'date' => '2024-03-15', 'approver' => 'JG'],
+        ['key' => 'accession',     'icon' => 'inventory_2',     'label' => 'Accession',                        'version' => 'v1.1', 'date' => '2024-03-10', 'approver' => 'JG'],
+        ['key' => 'authority',     'icon' => 'person',          'label' => 'Authority Record',                 'version' => 'v1.0', 'date' => '2024-03-01', 'approver' => 'JG'],
+        ['key' => 'authority_rel', 'icon' => 'hub',             'label' => 'Authority Relationships',   'version' => 'v1.0', 'date' => '2024-03-01', 'approver' => 'JG'],
+        ['key' => 'events',        'icon' => 'event',           'label' => 'Events',                           'version' => 'v1.0', 'date' => '2024-02-28', 'approver' => 'JG'],
+        ['key' => 'institutions',  'icon' => 'account_balance', 'label' => 'Archival Institutions',            'version' => 'v1.0', 'date' => '2024-02-28', 'approver' => 'JG'],
 ];
 
 $formatSize = static function (int $bytes): string {
@@ -138,16 +138,31 @@ ob_start();
                             <td class="size text-muted"><?= htmlspecialchars($formatSize($f->sizeBytes), ENT_QUOTES, 'UTF-8') ?></td>
                             <td class="run-date text-muted">—</td>
                             <td class="pipeline">
-                                <select class="form-select pipeline-select">
-                                    <option value="">Select a pipeline…</option>
-                                    <?php foreach ($pipelines as $p): ?>
-                                        <option value="<?= htmlspecialchars($p['key'], ENT_QUOTES, 'UTF-8') ?>">
-                                            <?= htmlspecialchars($p['label'], ENT_QUOTES, 'UTF-8') ?>
-                                        </option>
-                                    <?php endforeach; ?>
-                                </select>
-                            </td>
-                            <td class="col-icon text-center">
+                                <div class="pipeline-selector">
+                                    <button type="button" class="pipeline-selector__trigger form-select">
+                                        <span class="pipeline-selector__placeholder">Select a pipeline…</span>
+                                    </button>
+                                    <div class="pipeline-selector__dropdown" hidden>
+                                        <?php foreach ($pipelines as $p): ?>
+                                            <button type="button"
+                                                    class="pipeline-selector__option"
+                                                    data-value="<?= htmlspecialchars($p['key'], ENT_QUOTES, 'UTF-8') ?>">
+                                                <div class="pipeline-selector__label">
+                                                    <?= htmlspecialchars($p['label'], ENT_QUOTES, 'UTF-8') ?>
+                                                </div>
+                                                <div class="pipeline-selector__meta">
+                                                    <?= htmlspecialchars($p['version'], ENT_QUOTES, 'UTF-8') ?>
+                                                    &middot;
+                                                    <?= htmlspecialchars($p['date'], ENT_QUOTES, 'UTF-8') ?>
+                                                    &middot;
+                                                    Approved by <?= htmlspecialchars($p['approver'], ENT_QUOTES, 'UTF-8') ?>
+                                                </div>
+                                            </button>
+                                        <?php endforeach; ?>
+                                    </div>
+                                    <input type="hidden" class="pipeline-select" value="">
+                                </div>
+                            </td>       <td class="col-icon text-center">
                                 <span class="material-symbols-rounded text-muted" title="Download (available after transformation)">download</span>
                             </td>
                             <td class="col-icon text-center">

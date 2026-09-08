@@ -49,3 +49,57 @@
 
     refresh();
 })();
+
+// Custom pipeline selector (Amazon AMI style).
+document.querySelectorAll('.pipeline-selector').forEach(selector => {
+    const trigger = selector.querySelector('.pipeline-selector__trigger');
+    const dropdown = selector.querySelector('.pipeline-selector__dropdown');
+    const hiddenInput = selector.querySelector('.pipeline-select');
+    const placeholder = selector.querySelector('.pipeline-selector__placeholder');
+    const options = selector.querySelectorAll('.pipeline-selector__option');
+
+    if (!trigger || !dropdown || !hiddenInput) return;
+
+    // Toggle dropdown
+    trigger.addEventListener('click', () => {
+        const isHidden = dropdown.hasAttribute('hidden');
+        // Close all other open dropdowns first
+        document.querySelectorAll('.pipeline-selector__dropdown').forEach(d => {
+            if (d !== dropdown) d.setAttribute('hidden', '');
+        });
+        if (isHidden) {
+            dropdown.removeAttribute('hidden');
+        } else {
+            dropdown.setAttribute('hidden', '');
+        }
+    });
+
+    // Select option
+    options.forEach(option => {
+        option.addEventListener('click', () => {
+            const value = option.dataset.value;
+            const labelEl = option.querySelector('.pipeline-selector__label');
+            const metaEl = option.querySelector('.pipeline-selector__meta');
+
+            hiddenInput.value = value;
+
+            // Update trigger to show selected value
+            trigger.innerHTML = `
+                <div class="pipeline-selector__label">${labelEl.textContent}</div>
+                <div class="pipeline-selector__meta">${metaEl.textContent}</div>
+            `;
+
+            dropdown.setAttribute('hidden', '');
+
+            // Trigger change event so existing form logic picks it up
+            hiddenInput.dispatchEvent(new Event('change', { bubbles: true }));
+        });
+    });
+
+    // Close dropdown when clicking outside
+    document.addEventListener('click', (e) => {
+        if (!selector.contains(e.target)) {
+            dropdown.setAttribute('hidden', '');
+        }
+    });
+});
