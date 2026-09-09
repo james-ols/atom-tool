@@ -103,3 +103,134 @@ document.querySelectorAll('.pipeline-selector').forEach(selector => {
         }
     });
 });
+
+// Preflight panel: hover a row's plane to preview coverage, click to pin.
+(function () {
+    'use strict';
+
+    const planes = document.querySelectorAll('.preflight-plane');
+    const empty = document.getElementById('preflight-empty');
+    const content = document.getElementById('preflight-content');
+    const arc = document.getElementById('preflight-donut-arc');
+    const pctEl = document.getElementById('preflight-pct');
+    const summaryEl = document.getElementById('preflight-summary');
+    const unmappedEl = document.getElementById('preflight-unmapped');
+    const provenanceEl = document.getElementById('preflight-provenance');
+    const unpinBtn = document.getElementById('preflight-unpin');
+
+    if (!content || !empty || !arc || !pctEl || !summaryEl || !unmappedEl || !provenanceEl) {
+        return;
+    }
+
+    const R = 52;
+    const CIRC = 2 * Math.PI * R; // circumference of the donut circle
+    arc.style.strokeDasharray = String(CIRC);
+    arc.style.strokeDashoffset = String(CIRC); // start empty
+
+    let pinnedPlane = null;
+
+    function showEmpty() {
+        content.setAttribute('hidden', '');
+        empty.removeAttribute('hidden');
+        if (unpinBtn) unpinBtn.setAttribute('hidden', '');
+    }
+
+    function render(report) {
+        const cov = report.coverage || {};
+        const pct = typeof cov.percentMapped === 'number' ? cov.percentMapped : 0;
+        const present = cov.presentCount ?? 0;
+        const mapped = cov.mappedCount ?? 0;
+        const records = report.records ?? 0;
+
+        // Donut arc.
+        pctEl.textContent = pct.toFixed(1) + '%';
+        const offset = CIRC * (1 - Math.max(0, Math.min(100, pct)) / 100);
+        arc.style.strokeDashoffset = String(offset);
+
+        // Summary line.
+        summaryEl.textContent =
+            mapped + ' of ' + present + ' populated fields mapped · ' + records + ' records';
+
+        // Unmapped list (report.unmapped is { name: count }, already ranked).
+        unmappedEl.innerHTML = '';
+        const unmapped = report.unmapped || {};
+        const names = Object.keys(unmapped);
+        if (names.length === 0) {
+            const li = document.createElement('li');
+            li.textContent = 'Nothing populated is unmapped. 🎉';
+            unmappedEl.appendChild(li);
+        } else {
+            names.forEach(function (name) {
+                const li = document.createElement('li');
+                const nameSpan = document.createElement('span');
+                nameSpan.className = 'preflight-unmapped__name';
+                nameSpan.textContent = name;
+                const countSpan = document.createElement('span');
+                countSpan.className = 'preflight-unmapped__count';
+                countSpan.textContent = String(unmapped[name]);
+                li.appendChild(nameSpan);
+                li.appendChild(countSpan);
+                unmappedEl.appendChild(li);
+            });
+        }
+
+        // Provenance footer.
+        const m = report.mapping || {};
+        const bits = [];
+        if (m.version) bits.push('Mapping v' + m.version);
+        if (m.versionDate) bits.push(m.versionDate);
+        if (m.authorisedBy) bits.push('approved by ' + m.authorisedBy);
+        provenanceEl.textContent = bits.join(' · ');
+
+        empty.setAttribute('hidden', '');
+        content.removeAttribute('hidden');
+    }
+
+    function parseReport(plane) {
+        try {
+            return JSON.parse(plane.getAttribute('data-report') || '');
+        } catch (e) {
+            return null;
+        }
+    }
+
+    planes.forEach(function (plane) {
+        plane.addEventListener('mouseenter', function () {
+            if (pinnedPlane) return; // don't override a pinned view on hover
+            const report = parseReport(plane);
+            if (report) render(report);
+        });
+
+        plane.addEventListener('mouseleave', function () {
+            if (pinnedPlane) return;
+            showEmpty();
+        });
+
+        plane.addEventListener('click', function () {
+            const report = parseReport(plane);
+            if (!report) return;
+
+            if (pinnedPlane === plane) {
+                // Clicking the pinned plane again unpins.
+                pinnedPlane.classList.remove('is-active');
+                pinnedPlane = null;
+                showEmpty();
+                return;
+            }
+
+            if (pinnedPlane) pinnedPlane.classList.remove('is-active');
+            pinnedPlane = plane;
+            plane.classList.add('is-active');
+            render(report);
+            if (unpinBtn) unpinBtn.removeAttribute('hidden');
+        });
+    });
+
+    if (unpinBtn) {
+        unpinBtn.addEventListener('click', function () {
+            if (pinnedPlane) pinnedPlane.classList.remove('is-active');
+            pinnedPlane = null;
+            showEmpty();
+        });
+    }
+})();

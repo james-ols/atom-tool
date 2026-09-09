@@ -10,7 +10,8 @@
  *     uploadId:string,
  *     originalName:string,
  *     sizeBytes:int,
- *     latestRun: array<string,mixed>|null
+ *     latestRun: array<string,mixed>|null,
+ *     report: array<string,mixed>|null
  *   }> $uploads              Uploaded CALM files (manifest-shaped), newest first.
  */
 declare(strict_types=1);
@@ -185,10 +186,35 @@ ob_start();
                                     </div>
                                 </td>
                                 <td class="col-icon text-center">
-                                    <span class="material-symbols-rounded text-muted" title="Download (available after transformation)">download</span>
+                                    <?php if ($latest !== null && !empty($latest['runId'])): ?>
+                                        <a class="download-link"
+                                           href="/download?runId=<?= htmlspecialchars(rawurlencode((string) $latest['runId']), ENT_QUOTES, 'UTF-8') ?>"
+                                           title="Download the latest output CSV"
+                                           aria-label="Download output CSV">
+                                            <span class="material-symbols-rounded">download</span>
+                                        </a>
+                                    <?php else: ?>
+                                        <span class="material-symbols-rounded text-muted"
+                                              title="Download (available after a run)">download</span>
+                                    <?php endif; ?>
                                 </td>
                                 <td class="col-icon text-center">
-                                    <span class="material-symbols-rounded text-muted" title="Preflight (available after transformation)">flight</span>
+                                    <?php if (isset($u['report']) && is_array($u['report'])): ?>
+                                        <button type="button"
+                                                class="preflight-plane"
+                                                title="Preflight coverage for the latest run"
+                                                aria-label="Show preflight coverage"
+                                                data-report="<?= htmlspecialchars(
+                                                        (string) json_encode($u['report'], JSON_UNESCAPED_SLASHES),
+                                                        ENT_QUOTES,
+                                                        'UTF-8'
+                                                ) ?>">
+                                            <span class="material-symbols-rounded">flight</span>
+                                        </button>
+                                    <?php else: ?>
+                                        <span class="material-symbols-rounded text-muted"
+                                              title="Preflight (available after a run)">flight</span>
+                                    <?php endif; ?>
                                 </td>
                             </tr>
                         <?php endforeach; ?>
@@ -209,9 +235,37 @@ ob_start();
             <header class="app-preflight__header">
                 <span class="material-symbols-rounded">flight</span>
                 <span>Preflight</span>
+                <button type="button" id="preflight-unpin" class="preflight-unpin" hidden title="Unpin">
+                    <span class="material-symbols-rounded">close</span>
+                </button>
             </header>
-            <div class="app-preflight__body app-preflight__body--empty">
-                Select a file to see coverage and unmapped fields.
+
+            <div class="app-preflight__body">
+                <div id="preflight-empty" class="app-preflight__body--empty">
+                    Hover a row's plane icon to preview coverage; click it to pin.
+                </div>
+
+                <div id="preflight-content" hidden>
+                    <div class="preflight-donut">
+                        <svg viewBox="0 0 120 120" width="140" height="140" aria-hidden="true">
+                            <circle class="preflight-donut__track" cx="60" cy="60" r="52"></circle>
+                            <circle id="preflight-donut-arc" class="preflight-donut__arc"
+                                    cx="60" cy="60" r="52"
+                                    transform="rotate(-90 60 60)"></circle>
+                        </svg>
+                        <div class="preflight-donut__centre">
+                            <span id="preflight-pct" class="preflight-donut__pct">0%</span>
+                            <span class="preflight-donut__caption">mapped</span>
+                        </div>
+                    </div>
+
+                    <p id="preflight-summary" class="preflight-summary"></p>
+
+                    <h3 class="preflight-subhead">Populated but unmapped</h3>
+                    <ul id="preflight-unmapped" class="preflight-unmapped"></ul>
+
+                    <p id="preflight-provenance" class="preflight-provenance"></p>
+                </div>
             </div>
         </aside>
 

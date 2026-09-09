@@ -318,6 +318,21 @@ body {
     width: 300px;
 }
 
+.download-link {
+    color: var(--ols-muted);
+    text-decoration: none;
+    line-height: 1;
+    transition: color 0.12s, transform 0.12s;
+}
+.download-link:hover {
+    color: var(--ols-orange);
+    transform: translateY(-1px);
+}
+.download-link .material-symbols-rounded {
+    font-size: 22px;
+    vertical-align: middle;
+}
+
 /* Custom pipeline selector (Amazon AMI style). */
 .pipeline-selector {
     position: relative;
@@ -416,12 +431,28 @@ body {
     border-color: var(--ols-orange);
     box-shadow: 0 0 0 3px rgba(242, 140, 40, 0.15);
 }
+
+/* Icons in the action columns. The base rule mutes static icons; interactive
+   ones (plane, download) get pointer cursor and orange on hover via the more
+   specific rules below so they beat this muted colour. */
 .app-centre__table td.col-icon .material-symbols-rounded {
     font-size: 22px;
     vertical-align: middle;
     color: var(--ols-muted);
     cursor: default;
 }
+.app-centre__table td.col-icon .preflight-plane,
+.app-centre__table td.col-icon .download-link {
+    cursor: pointer;
+}
+.app-centre__table td.col-icon .preflight-plane:hover .material-symbols-rounded,
+.app-centre__table td.col-icon .download-link:hover .material-symbols-rounded {
+    color: var(--ols-orange);
+}
+.app-centre__table td.col-icon .preflight-plane.is-active .material-symbols-rounded {
+    color: var(--ols-orange-dark);
+}
+
 .app-centre__footer {
     margin-top: auto;
     padding-top: 0.75rem;
@@ -460,4 +491,133 @@ body {
     color: var(--ols-muted);
     font-size: 0.85rem;
     font-style: italic;
+}
+
+/* ---- Preflight: interactive plane + panel contents ---- */
+
+.preflight-plane {
+    background: transparent;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    color: var(--ols-muted);
+    line-height: 1;
+    transition: color 0.12s, transform 0.12s;
+}
+.preflight-plane:hover {
+    color: var(--ols-orange);
+    transform: translateY(-1px);
+}
+.preflight-plane.is-active {
+    color: var(--ols-orange-dark);
+}
+.preflight-plane .material-symbols-rounded {
+    font-size: 22px;
+    vertical-align: middle;
+}
+
+.preflight-unpin {
+    margin-left: auto;
+    background: transparent;
+    border: none;
+    color: var(--ols-muted);
+    cursor: pointer;
+    line-height: 1;
+    padding: 0;
+}
+.preflight-unpin:hover {
+    color: var(--ols-orange-dark);
+}
+.preflight-unpin .material-symbols-rounded {
+    font-size: 18px;
+}
+
+.preflight-donut {
+    position: relative;
+    width: 140px;
+    height: 140px;
+    margin: 0.25rem auto 1rem;
+}
+.preflight-donut__track {
+    fill: none;
+    stroke: #eef0f2;
+    stroke-width: 14;
+}
+.preflight-donut__arc {
+    fill: none;
+    stroke: var(--ols-orange);
+    stroke-width: 14;
+    stroke-linecap: round;
+    transition: stroke-dashoffset 0.4s ease;
+}
+.preflight-donut__centre {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+}
+.preflight-donut__pct {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--ols-ink);
+    font-variant-numeric: tabular-nums;
+}
+.preflight-donut__caption {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--ols-muted);
+}
+
+.preflight-summary {
+    font-size: 0.85rem;
+    color: var(--ols-ink);
+    text-align: center;
+    margin: 0 0 1rem;
+}
+
+.preflight-subhead {
+    font-size: 0.72rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--ols-muted);
+    margin: 0 0 0.5rem;
+}
+
+.preflight-unmapped {
+    list-style: none;
+    padding: 0;
+    margin: 0 0 1rem;
+}
+.preflight-unmapped li {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.5rem;
+    padding: 0.3rem 0;
+    border-bottom: 1px solid #f3f4f6;
+    font-size: 0.85rem;
+}
+.preflight-unmapped li:last-child {
+    border-bottom: none;
+}
+.preflight-unmapped__name {
+    color: var(--ols-ink);
+    word-break: break-word;
+}
+.preflight-unmapped__count {
+    color: var(--ols-muted);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+.preflight-provenance {
+    font-size: 0.75rem;
+    color: var(--ols-muted);
+    border-top: 1px solid var(--ols-border);
+    padding-top: 0.6rem;
+    margin: 0;
 }

@@ -92,11 +92,30 @@ final class Application
             $uploads = [];
             foreach ($this->manifest->listUploads() as $m) {
                 $latest = $this->manifest->latestRun((string) $m['uploadId']);
+
+                // Attach the latest run's full preflight report (decoded) so the
+                // Preflight panel can render it on hover/pin. Null if never run.
+                $report = null;
+                if ($latest !== null && !empty($latest['report'])) {
+                    $reportName = (string) $latest['report'];
+                    if ($this->storage->get(Storage::AREA_REPORTS, $reportName) !== null) {
+                        $stream = $this->storage->openRead(Storage::AREA_REPORTS, $reportName);
+                        try {
+                            $json = stream_get_contents($stream);
+                        } finally {
+                            fclose($stream);
+                        }
+                        $decoded = json_decode((string) $json, true);
+                        $report = is_array($decoded) ? $decoded : null;
+                    }
+                }
+
                 $uploads[] = [
                     'uploadId'     => (string) $m['uploadId'],
                     'originalName' => (string) ($m['originalName'] ?? $m['uploadId']),
                     'sizeBytes'    => (int) ($m['sizeBytes'] ?? 0),
-                    'latestRun'    => $latest, // array|null
+                    'latestRun'    => $latest,  // array|null
+                    'report'       => $report,  // array|null (full preflight report)
                 ];
             }
 
@@ -106,6 +125,37 @@ final class Application
                 'engineVersion' => $version,
                 'uploads'       => $uploads,
             ]));
+        }));
+
+        $router->get('/download', $requireAuth(function (Request $request, Session $session): Response {
+            $runId = (string) $request->queryParam('runId', '');
+            if ($runId === '') {
+                return Response::notFound('Missing run identifier.');
+            }
+
+            // The output is stored flat as <runId>.csv. Guard the name so a
+            // crafted runId can't escape the outputs area.
+            if (!preg_match('/^[0-9a-fA-F-]{36}$/', $runId)) {
+                return Response::notFound('Invalid run identifier.');
+            }
+
+            $outputName = $runId . '.csv';
+            if ($this->storage->get(Storage::AREA_OUTPUTS, $outputName) === null) {
+                return Response::notFound('Output not found.');
+            }
+
+            $stream = $this->storage->openRead(Storage::AREA_OUTPUTS, $outputName);
+            try {
+                $csv = (string) stream_get_contents($stream);
+            } finally {
+                fclose($stream);
+            }
+
+            return (new Response())
+                ->header('Content-Type', 'text/csv; charset=utf-8')
+                ->header('Content-Disposition', 'attachment; filename="' . $outputName . '"')
+                ->header('Content-Length', (string) strlen($csv))
+                ->body($csv);
         }));
 
         $router->post('/upload', $requireAuth(function (Request $request, Session $session): Response {
