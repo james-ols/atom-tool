@@ -82,6 +82,17 @@ final class Mapping
     }
 
     /**
+     * The set of CALM source element names this mapping consumes.
+     * Used by Preflight to decide which populated elements are "unmapped".
+     *
+     * @return list<string>
+     */
+    public function sourceKeys(): array
+    {
+        return array_keys($this->fields);
+    }
+
+    /**
      * Map one parsed CALM record (childName => list<string>) to an AtoM row
      * (column => string value).
      *

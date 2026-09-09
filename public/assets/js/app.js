@@ -5,11 +5,11 @@
     const table = document.getElementById('files-table');
     const btnRun = document.getElementById('btn-run');
     const btnClear = document.getElementById('btn-clear');
-    const runName = document.getElementById('run-name');
+    const runUploadId = document.getElementById('run-upload-id');
     const runPipeline = document.getElementById('run-pipeline');
-    const deleteName = document.getElementById('delete-name');
+    const deleteUploadId = document.getElementById('delete-upload-id');
 
-    if (!table || !btnRun || !btnClear || !runName || !runPipeline || !deleteName) {
+    if (!table || !btnRun || !btnClear || !runUploadId || !runPipeline || !deleteUploadId) {
         return;
     }
 
@@ -26,16 +26,16 @@
 
     function refresh() {
         const row = selectedRow();
-        const name = row ? row.dataset.filename : '';
+        const uploadId = row ? row.dataset.uploadId : '';
         const pipeline = pipelineFor(row);
 
         // Clear: enabled when a row is selected.
         btnClear.disabled = !row;
-        deleteName.value = name;
+        deleteUploadId.value = uploadId;
 
         // Run: enabled when a row is selected AND its pipeline is chosen.
         btnRun.disabled = !row || pipeline === '';
-        runName.value = name;
+        runUploadId.value = uploadId;
         runPipeline.value = pipeline;
     }
 

@@ -9,8 +9,11 @@ use AtomTool\Http\Response;
 use AtomTool\Http\Router;
 use AtomTool\Mapping\Mapping;
 use AtomTool\Parser\CalmStreamParser;
+use AtomTool\Report\Coverage;
 use AtomTool\Storage\LocalStorage;
+use AtomTool\Storage\Manifest;
 use AtomTool\Storage\Storage;
+use AtomTool\Support\Uuid;
 
 /**
  * Top-level engine facade. Builds the Router, dispatches the current Request,
@@ -19,11 +22,13 @@ use AtomTool\Storage\Storage;
 final class Application
 {
     private Storage $storage;
+    private Manifest $manifest;
 
     public function __construct(
         private readonly Config $config,
     ) {
         $this->storage = new LocalStorage($this->config->storageRoot());
+        $this->manifest = new Manifest($this->storage);
     }
 
     public function run(): void
@@ -81,11 +86,25 @@ final class Application
 
         $router->get('/', $requireAuth(function (Request $request, Session $session): Response {
             $version = trim((string) @file_get_contents($this->config->engineRoot() . '/VERSION'));
+
+            // Build the dashboard rows from per-upload manifests (friendly names,
+            // GUID identity, latest run's coverage), not raw directory listings.
+            $uploads = [];
+            foreach ($this->manifest->listUploads() as $m) {
+                $latest = $this->manifest->latestRun((string) $m['uploadId']);
+                $uploads[] = [
+                    'uploadId'     => (string) $m['uploadId'],
+                    'originalName' => (string) ($m['originalName'] ?? $m['uploadId']),
+                    'sizeBytes'    => (int) ($m['sizeBytes'] ?? 0),
+                    'latestRun'    => $latest, // array|null
+                ];
+            }
+
             return Response::html($this->render('dashboard', [
                 'username'      => (string) $session->username(),
                 'customerCode'  => $this->config->customerCode,
                 'engineVersion' => $version,
-                'files'         => $this->storage->list(Storage::AREA_UPLOADS),
+                'uploads'       => $uploads,
             ]));
         }));
 
@@ -95,60 +114,61 @@ final class Application
                 return Response::redirect('/');
             }
 
-            $name = (string) ($file['name'] ?? '');
+            $originalName = (string) ($file['name'] ?? '');
             $tmp  = (string) ($file['tmp_name'] ?? '');
             if (!is_uploaded_file($tmp)) {
                 return Response::redirect('/');
             }
 
-            if (strtolower((string) pathinfo($name, PATHINFO_EXTENSION)) !== 'xml') {
+            if (strtolower((string) pathinfo($originalName, PATHINFO_EXTENSION)) !== 'xml') {
                 return Response::redirect('/');
             }
 
+            // Assign a GUID identity; store bytes as uploads/<uploadId>.xml.
+            $uploadId = Uuid::v4();
             $handle = fopen($tmp, 'rb');
             if ($handle === false) {
                 return Response::redirect('/');
             }
             try {
-                $this->storage->storeStream(Storage::AREA_UPLOADS, $name, $handle);
+                $stored = $this->storage->storeStream(Storage::AREA_UPLOADS, $uploadId . '.xml', $handle);
             } finally {
                 fclose($handle);
             }
+
+            // Write the per-upload manifest alongside the XML.
+            $this->manifest->createUpload($uploadId, $originalName, $stored->sizeBytes);
 
             return Response::redirect('/');
         }));
 
         $router->post('/delete', $requireAuth(function (Request $request, Session $session): Response {
-            $name = (string) $request->postParam('name', '');
-            if ($name === '') {
+            $uploadId = (string) $request->postParam('uploadId', '');
+            if ($uploadId === '') {
                 return Response::redirect('/');
             }
 
-            $this->storage->delete(Storage::AREA_UPLOADS, $name);
-
-            $base = pathinfo($name, PATHINFO_FILENAME);
-            foreach ($this->storage->list(Storage::AREA_OUTPUTS) as $out) {
-                if (pathinfo($out->name, PATHINFO_FILENAME) === $base) {
-                    $this->storage->delete(Storage::AREA_OUTPUTS, $out->name);
-                }
-            }
-            foreach ($this->storage->list(Storage::AREA_REPORTS) as $rep) {
-                if (pathinfo($rep->name, PATHINFO_FILENAME) === $base) {
-                    $this->storage->delete(Storage::AREA_REPORTS, $rep->name);
-                }
-            }
+            // Manifest-driven, exact delete: the upload, its manifest, and every
+            // run's output + report. Flat keys, no pattern matching.
+            $this->manifest->deleteUpload($uploadId);
 
             return Response::redirect('/');
         }));
 
         $router->post('/run', $requireAuth(function (Request $request, Session $session): Response {
-            $name = (string) $request->postParam('name', '');
+            $uploadId = (string) $request->postParam('uploadId', '');
             $pipeline = (string) $request->postParam('pipeline', '');
 
-            if ($name === '' || $pipeline === '') {
+            if ($uploadId === '' || $pipeline === '') {
                 return Response::redirect('/');
             }
-            if ($this->storage->get(Storage::AREA_UPLOADS, $name) === null) {
+
+            $uploadManifest = $this->manifest->load($uploadId);
+            if ($uploadManifest === null) {
+                return Response::redirect('/');
+            }
+            $xmlName = $uploadId . '.xml';
+            if ($this->storage->get(Storage::AREA_UPLOADS, $xmlName) === null) {
                 return Response::redirect('/');
             }
 
@@ -180,24 +200,28 @@ final class Application
             }
             /** @var list<string> $header */
 
-            // Stream CALM -> map -> build CSV in memory (temp stream), then store.
-            $base = pathinfo($name, PATHINFO_FILENAME);
+            // Every run gets its own GUID; artefacts are flat, GUID-named.
+            $runId = Uuid::v4();
+            $csvName = $runId . '.csv';
+            $reportName = $runId . '.preflight.txt';
+
+            // Stream CALM -> map -> build CSV; observe coverage as we go.
             $csv = fopen('php://temp', 'r+b');
-            $rowsWritten = 0;
+            $coverage = new Coverage();
 
             fputcsv($csv, $header, escape: '');
 
             $parser = new CalmStreamParser();
-            $inStream = $this->storage->openRead(Storage::AREA_UPLOADS, $name);
+            $inStream = $this->storage->openRead(Storage::AREA_UPLOADS, $xmlName);
             try {
                 foreach ($parser->parse($inStream) as $record) {
+                    $coverage->observe($record);
                     $mapped = $mapping->mapRecord($record);
                     $line = [];
                     foreach ($header as $column) {
                         $line[] = $mapped[$column] ?? '';
                     }
                     fputcsv($csv, $line, escape: '');
-                    $rowsWritten++;
                 }
             } finally {
                 fclose($inStream);
@@ -205,28 +229,56 @@ final class Application
 
             rewind($csv);
             try {
-                $this->storage->storeStream(Storage::AREA_OUTPUTS, $base . '.csv', $csv);
+                $this->storage->storeStream(Storage::AREA_OUTPUTS, $csvName, $csv);
             } finally {
                 fclose($csv);
             }
 
-            // Minimal run report (Preflight panel wiring comes next).
+            // Preflight coverage report (JSON inside a .preflight.txt file).
+            $summary = $coverage->summarise($mapping->sourceKeys());
+            $ranAt = date('c');
             $report = [
-                'file'        => $name,
-                'pipeline'    => $pipeline,
-                'rows'        => $rowsWritten,
-                'mapping'     => [
+                'runId'        => $runId,
+                'uploadId'     => $uploadId,
+                'generatedAt'  => $ranAt,
+                'source'       => (string) ($uploadManifest['originalName'] ?? $uploadId),
+                'pipeline'     => $pipeline,
+                'output'       => $csvName,
+                'records'      => $summary['records'],
+                'coverage'     => [
+                    'presentCount'  => $summary['presentCount'],
+                    'mappedCount'   => $summary['mappedCount'],
+                    'unmappedCount' => $summary['unmappedCount'],
+                    'percentMapped' => $summary['percentMapped'],
+                ],
+                'mapped'       => $summary['mapped'],
+                'unmapped'     => $summary['unmapped'],
+                'mapping'      => [
                     'version'      => $mapping->version(),
                     'versionDate'  => $mapping->versionDate(),
                     'authorisedBy' => $mapping->authorisedBy(),
                 ],
-                'generatedAt' => date('c'),
             ];
             $this->storage->storeString(
                 Storage::AREA_REPORTS,
-                $base . '.json',
+                $reportName,
                 (string) json_encode($report, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES)
             );
+
+            // Record the run in the upload's manifest (with a coverage summary
+            // so the dashboard needn't open every report file).
+            $this->manifest->addRun($uploadId, [
+                'runId'    => $runId,
+                'pipeline' => $pipeline,
+                'ranAt'    => $ranAt,
+                'output'   => $csvName,
+                'report'   => $reportName,
+                'coverage' => [
+                    'percentMapped' => $summary['percentMapped'],
+                    'unmappedCount' => $summary['unmappedCount'],
+                    'records'       => $summary['records'],
+                ],
+            ]);
 
             return Response::redirect('/');
         }));
