@@ -10,6 +10,7 @@ use AtomTool\Http\Router;
 use AtomTool\Mapping\Mapping;
 use AtomTool\Parser\CalmStreamParser;
 use AtomTool\Report\Coverage;
+use AtomTool\Report\MappingDiagram;
 use AtomTool\Storage\LocalStorage;
 use AtomTool\Storage\Manifest;
 use AtomTool\Storage\Storage;
@@ -156,6 +157,50 @@ final class Application
                 ->header('Content-Disposition', 'attachment; filename="' . $outputName . '"')
                 ->header('Content-Length', (string) strlen($csv))
                 ->body($csv);
+        }));
+
+        $router->get('/diagram', $requireAuth(function (Request $request, Session $session): Response {
+            $pipeline = (string) $request->queryParam('pipeline', '');
+            if ($pipeline === '') {
+                return Response::notFound('Missing pipeline.');
+            }
+
+            $mappingFile = $this->config->mappingPath();
+            if (!is_file($mappingFile)) {
+                return Response::notFound('No mapping file.');
+            }
+            /** @var array<string,mixed> $allPipelines */
+            $allPipelines = require $mappingFile;
+
+            // Some pipelines may not be defined in mapping.php yet.
+            if (!isset($allPipelines[$pipeline]) || !is_array($allPipelines[$pipeline])) {
+                $svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 800" width="1280" height="800">'
+                    . '<rect width="1280" height="800" fill="#ffffff"/>'
+                    . '<text x="640" y="400" font-size="20" fill="#6b7280" text-anchor="middle" '
+                    . 'font-family="Inter, system-ui, sans-serif">No mapping defined for this pipeline yet.</text>'
+                    . '</svg>';
+                return (new Response())
+                    ->header('Content-Type', 'image/svg+xml; charset=utf-8')
+                    ->body($svg);
+            }
+
+            $mapping = Mapping::fromCustomerMapping($allPipelines, $pipeline);
+            $block = $allPipelines[$pipeline];
+            /** @var array<string,string> $fields */
+            $fields = is_array($block['fields'] ?? null) ? $block['fields'] : [];
+
+            $diagram = new MappingDiagram();
+            $svg = $diagram->render(
+                $fields,
+                ucfirst($pipeline),
+                $mapping->version(),
+                $mapping->versionDate(),
+                $mapping->authorisedBy()
+            );
+
+            return (new Response())
+                ->header('Content-Type', 'image/svg+xml; charset=utf-8')
+                ->body($svg);
         }));
 
         $router->post('/upload', $requireAuth(function (Request $request, Session $session): Response {

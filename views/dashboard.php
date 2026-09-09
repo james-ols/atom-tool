@@ -82,9 +82,9 @@ ob_start();
                 <?php foreach ($pipelines as $p): ?>
                     <li>
                         <button type="button"
-                                class="app-rail__icon"
-                                title="<?= htmlspecialchars($p['label'], ENT_QUOTES, 'UTF-8') ?>"
-                                aria-label="<?= htmlspecialchars($p['label'], ENT_QUOTES, 'UTF-8') ?>"
+                                class="app-rail__icon js-diagram-open"
+                                title="<?= htmlspecialchars($p['label'], ENT_QUOTES, 'UTF-8') ?> mapping diagram"
+                                aria-label="<?= htmlspecialchars($p['label'], ENT_QUOTES, 'UTF-8') ?> mapping diagram"
                                 data-pipeline="<?= htmlspecialchars($p['key'], ENT_QUOTES, 'UTF-8') ?>">
                             <span class="material-symbols-rounded"><?= htmlspecialchars($p['icon'], ENT_QUOTES, 'UTF-8') ?></span>
                         </button>
@@ -268,6 +268,15 @@ ob_start();
                 </div>
             </div>
         </aside>
+
+        <div id="diagram-overlay" class="diagram-overlay" hidden>
+            <div class="diagram-overlay__card">
+                <button type="button" id="diagram-close" class="diagram-overlay__close" title="Close" aria-label="Close">
+                    <span class="material-symbols-rounded">close</span>
+                </button>
+                <img id="diagram-image" class="diagram-overlay__img" src="" alt="Mapping diagram">
+            </div>
+        </div>
 
     </div>
 <?php

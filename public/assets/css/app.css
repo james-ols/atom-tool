@@ -621,3 +621,72 @@ body {
     padding-top: 0.6rem;
     margin: 0;
 }
+
+/* ---- Mapping diagram overlay ---- */
+
+/* Rail must float above the overlay so its icons stay visible and clickable
+   (switch pipelines with the overlay open). */
+.app-rail {
+    position: relative;
+    z-index: 60;
+}
+
+/* The overlay snaps to fill the working area: everything right of the 80px
+   rail and below the 56px topbar + 120px banner (= 176px). No floating card,
+   no wasted margin — it reads as the diagram taking over the workspace. */
+.diagram-overlay {
+    position: fixed;
+    top: 176px;
+    left: 80px;
+    right: 0;
+    bottom: 0;
+    background: #ffffff;
+    border-top: 1px solid var(--ols-border);
+    border-left: 1px solid var(--ols-border);
+    display: flex;
+    flex-direction: column;
+    z-index: 50;
+}
+.diagram-overlay[hidden] {
+    display: none;
+}
+.diagram-overlay__card {
+    position: relative;
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+    min-height: 0;
+    overflow: auto;
+}
+.diagram-overlay__img {
+    max-width: 100%;
+    max-height: 100%;
+    width: auto;
+    height: auto;
+    display: block;
+}
+.diagram-overlay__close {
+    position: absolute;
+    top: 0.75rem;
+    right: 0.75rem;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    border: 1px solid var(--ols-border);
+    background: #ffffff;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+    color: var(--ols-ink);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1;
+}
+.diagram-overlay__close:hover {
+    color: var(--ols-orange-dark);
+}
+.diagram-overlay__close .material-symbols-rounded {
+    font-size: 20px;
+}

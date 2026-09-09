@@ -234,3 +234,51 @@ document.querySelectorAll('.pipeline-selector').forEach(selector => {
         });
     }
 })();
+
+// Mapping diagram overlay: rail icon opens the current mapping.php diagram
+// for that pipeline. Rail stays clickable, so you can switch pipelines while
+// the overlay is open. Close via the X or by clicking the backdrop.
+(function () {
+    'use strict';
+
+    const overlay = document.getElementById('diagram-overlay');
+    const image = document.getElementById('diagram-image');
+    const closeBtn = document.getElementById('diagram-close');
+    const openers = document.querySelectorAll('.js-diagram-open');
+
+    if (!overlay || !image) {
+        return;
+    }
+
+    function open(pipeline) {
+        // Cache-bust so an edited mapping.php shows immediately.
+        image.src = '/diagram?pipeline=' + encodeURIComponent(pipeline) + '&t=' + Date.now();
+        overlay.removeAttribute('hidden');
+    }
+
+    function close() {
+        overlay.setAttribute('hidden', '');
+        image.src = '';
+    }
+
+    openers.forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            const pipeline = btn.getAttribute('data-pipeline') || '';
+            if (pipeline) open(pipeline);
+        });
+    });
+
+    if (closeBtn) {
+        closeBtn.addEventListener('click', close);
+    }
+
+    // Click the dimmed backdrop (but not the card) to close.
+    overlay.addEventListener('click', function (e) {
+        if (e.target === overlay) close();
+    });
+
+    // Esc closes too.
+    document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape' && !overlay.hasAttribute('hidden')) close();
+    });
+})();
