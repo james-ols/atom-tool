@@ -7,6 +7,8 @@ use AtomTool\Auth\Session;
 use AtomTool\Http\Request;
 use AtomTool\Http\Response;
 use AtomTool\Http\Router;
+use AtomTool\Mapping\Mapping;
+use AtomTool\Parser\CalmStreamParser;
 use AtomTool\Storage\LocalStorage;
 use AtomTool\Storage\Storage;
 
@@ -139,8 +141,6 @@ final class Application
             return Response::redirect('/');
         }));
 
-        // Stub: real transformation lands in Step 7 (streams parser + mapping).
-        // For now, verify the file exists and the pipeline is known, then redirect.
         $router->post('/run', $requireAuth(function (Request $request, Session $session): Response {
             $name = (string) $request->postParam('name', '');
             $pipeline = (string) $request->postParam('pipeline', '');
@@ -151,8 +151,83 @@ final class Application
             if ($this->storage->get(Storage::AREA_UPLOADS, $name) === null) {
                 return Response::redirect('/');
             }
-            // TODO Step 7: dispatch to PipelineRegistry, stream the XML,
-            // write outputs/<base>.csv and reports/<base>.json.
+
+            // Load the customer's mapping.php and build the Mapping for this pipeline.
+            $mappingFile = $this->config->mappingPath();
+            if (!is_file($mappingFile)) {
+                return Response::redirect('/');
+            }
+            /** @var array<string,mixed> $allPipelines */
+            $allPipelines = require $mappingFile;
+            $mapping = Mapping::fromCustomerMapping($allPipelines, $pipeline);
+
+            // The authoritative column order comes from the AtoM template CSV.
+            $templateFile = $this->config->templatesPath() . '/atom_' . $pipeline . '.csv';
+            if (!is_file($templateFile)) {
+                return Response::redirect('/');
+            }
+            $templateHandle = fopen($templateFile, 'rb');
+            if ($templateHandle === false) {
+                return Response::redirect('/');
+            }
+            try {
+                $header = fgetcsv($templateHandle, escape: '');
+            } finally {
+                fclose($templateHandle);
+            }
+            if (!is_array($header) || $header === []) {
+                return Response::redirect('/');
+            }
+            /** @var list<string> $header */
+
+            // Stream CALM -> map -> build CSV in memory (temp stream), then store.
+            $base = pathinfo($name, PATHINFO_FILENAME);
+            $csv = fopen('php://temp', 'r+b');
+            $rowsWritten = 0;
+
+            fputcsv($csv, $header, escape: '');
+
+            $parser = new CalmStreamParser();
+            $inStream = $this->storage->openRead(Storage::AREA_UPLOADS, $name);
+            try {
+                foreach ($parser->parse($inStream) as $record) {
+                    $mapped = $mapping->mapRecord($record);
+                    $line = [];
+                    foreach ($header as $column) {
+                        $line[] = $mapped[$column] ?? '';
+                    }
+                    fputcsv($csv, $line, escape: '');
+                    $rowsWritten++;
+                }
+            } finally {
+                fclose($inStream);
+            }
+
+            rewind($csv);
+            try {
+                $this->storage->storeStream(Storage::AREA_OUTPUTS, $base . '.csv', $csv);
+            } finally {
+                fclose($csv);
+            }
+
+            // Minimal run report (Preflight panel wiring comes next).
+            $report = [
+                'file'        => $name,
+                'pipeline'    => $pipeline,
+                'rows'        => $rowsWritten,
+                'mapping'     => [
+                    'version'      => $mapping->version(),
+                    'versionDate'  => $mapping->versionDate(),
+                    'authorisedBy' => $mapping->authorisedBy(),
+                ],
+                'generatedAt' => date('c'),
+            ];
+            $this->storage->storeString(
+                Storage::AREA_REPORTS,
+                $base . '.json',
+                (string) json_encode($report, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES)
+            );
+
             return Response::redirect('/');
         }));
 
