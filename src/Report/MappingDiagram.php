@@ -10,10 +10,11 @@ namespace AtomTool\Report;
  * elements; right column = AtoM target columns; smooth Bézier connectors show
  * the mapping, with many-to-one fan-in where several sources feed one column.
  *
- * Where an AtoM column is transformed (mapping.php 'clean' block), the flow
- * into it carries a small filled "fn" dot at its midpoint — a visual cue that a
- * treatment exists on that field, to be discussed with the client. (No function
- * name; the dot's presence is the point.)
+ * Where an AtoM column is transformed — either by a per-value cleaner
+ * (mapping.php 'clean' block) or by a named function on a 'derived' arrow —
+ * the flow into it carries a small filled "fn" dot near the arrowhead, a visual
+ * cue that a treatment exists on that field. (No function name; the dot's
+ * presence is the point.)
  *
  * Fixed 1280 WIDTH; data-driven HEIGHT (rows at a fixed pitch, never
  * compressed). Pure string building — no image library, no fonts on disk.
@@ -33,6 +34,11 @@ final class MappingDiagram
 
     private const BOX_H = 26;
 
+    // Where the "fn" dot sits along its own flow: a Bézier parameter near the
+    // target end (1.0 = on the arrowhead). Keeping it close to the target keeps
+    // it on its own line, clear of other flows crossing the middle.
+    private const FN_DOT_T = 0.95;
+
     private const INK = '#1f2937';
     private const MUTED = '#6b7280';
     private const ORANGE = '#f28c28';
@@ -40,8 +46,9 @@ final class MappingDiagram
     private const BORDER = '#e5e7eb';
 
     /**
-     * @param array<string,string> $fields        CALM element => AtoM column
-     * @param list<string>         $cleanColumns  AtoM columns that carry a treatment
+     * @param array<string,string>                                 $fields        CALM element => AtoM column
+     * @param list<string>                                         $cleanColumns  AtoM columns that carry a treatment
+     * @param list<array{source:string,target:string,via:string}>  $derived       Functioned arrows
      */
     public function render(
         array $fields,
@@ -49,13 +56,27 @@ final class MappingDiagram
         string $version = '',
         string $versionDate = '',
         string $authorisedBy = '',
-        array $cleanColumns = []
+        array $cleanColumns = [],
+        array $derived = []
     ): string {
         $sources = array_keys($fields);
         $targets = [];
         foreach ($fields as $target) {
             if (!in_array($target, $targets, true)) {
                 $targets[] = $target;
+            }
+        }
+
+        // Derived arrows may introduce sources/targets not present in 'fields'
+        // (e.g. parentId). Fold them in so every box has a home.
+        foreach ($derived as $arrow) {
+            $s = (string) ($arrow['source'] ?? '');
+            $t = (string) ($arrow['target'] ?? '');
+            if ($s !== '' && !in_array($s, $sources, true)) {
+                $sources[] = $s;
+            }
+            if ($t !== '' && !in_array($t, $targets, true)) {
+                $targets[] = $t;
             }
         }
 
@@ -101,7 +122,6 @@ final class MappingDiagram
         $x1 = self::LEFT_X + self::COL_W;   // right edge of left box
         $x2 = self::RIGHT_X;                // left edge of right box
         $ctrl = (int) round(($x2 - $x1) * 0.45);
-        $midX = (int) round(($x1 + $x2) / 2);
 
         foreach ($fields as $source => $target) {
             $si = array_search($source, $sources, true);
@@ -126,11 +146,32 @@ final class MappingDiagram
                 $x2, $y2, self::ORANGE
             );
 
-            // Treatment marker: a small filled "fn" dot at the flow midpoint.
+            // Treatment marker: a small "fn" dot on this flow, just before the
+            // arrowhead (kept off the crowded midpoint).
             if (isset($cleanSet[$target])) {
-                $midY = (int) round(($y1 + $y2) / 2);
-                $svg[] = $this->fnDot($midX, $midY);
+                [$dotX, $dotY] = $this->pointOnFlow($x1, $y1, $ctrl, $x2, $y2, self::FN_DOT_T);
+                $svg[] = $this->fnDot($dotX, $dotY);
             }
+        }
+
+        // Derived arrows: an extra flow from source to target, always carrying
+        // the "fn" dot (a named function sits on it by definition).
+        foreach ($derived as $arrow) {
+            $s = (string) ($arrow['source'] ?? '');
+            $t = (string) ($arrow['target'] ?? '');
+            $si = array_search($s, $sources, true);
+            if ($si === false || !isset($targetY[$t])) {
+                continue;
+            }
+            $y1 = $leftY[$si];
+            $y2 = $targetY[$t];
+            $svg[] = sprintf(
+                '<path d="M %d %d C %d %d, %d %d, %d %d" fill="none" stroke="%s" stroke-width="1.5" opacity="0.85"/>',
+                $x1, $y1, $x1 + $ctrl, $y1, $x2 - $ctrl, $y2, $x2, $y2, self::ORANGE
+            );
+            $svg[] = sprintf('<path d="M %d %d l -7 -4 l 0 8 z" fill="%s"/>', $x2, $y2, self::ORANGE);
+            [$dotX, $dotY] = $this->pointOnFlow($x1, $y1, $ctrl, $x2, $y2, self::FN_DOT_T);
+            $svg[] = $this->fnDot($dotX, $dotY);
         }
 
         // Left boxes (sources) — CALM, navy outline.
@@ -157,6 +198,30 @@ final class MappingDiagram
             $ys[] = self::TOP + $i * self::ROW_PITCH;
         }
         return $ys;
+    }
+
+    /**
+     * Evaluate the flow's cubic Bézier at parameter $t (0 = source, 1 = target)
+     * and return an integer [x, y] point that lies ON the curve. The flow uses
+     * horizontal tangents, so control points are (x1+ctrl, y1) and (x2-ctrl, y2).
+     *
+     * @return array{int,int}
+     */
+    private function pointOnFlow(int $x1, int $y1, int $ctrl, int $x2, int $y2, float $t): array
+    {
+        $c1x = $x1 + $ctrl;
+        $c2x = $x2 - $ctrl;
+        $mt = 1.0 - $t;
+
+        $b0 = $mt * $mt * $mt;
+        $b1 = 3 * $mt * $mt * $t;
+        $b2 = 3 * $mt * $t * $t;
+        $b3 = $t * $t * $t;
+
+        $x = $b0 * $x1 + $b1 * $c1x + $b2 * $c2x + $b3 * $x2;
+        $y = $b0 * $y1 + $b1 * $y1  + $b2 * $y2  + $b3 * $y2;
+
+        return [(int) round($x), (int) round($y)];
     }
 
     /**

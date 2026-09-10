@@ -191,6 +191,7 @@ final class Application
 
             // AtoM columns that carry a treatment → their flow gets an "fn" dot.
             $cleanColumns = is_array($block['clean'] ?? null) ? array_keys($block['clean']) : [];
+            $derived = is_array($block['derived'] ?? null) ? $block['derived'] : [];
 
             $diagram = new MappingDiagram();
             $svg = $diagram->render(
@@ -199,7 +200,8 @@ final class Application
                 $mapping->version(),
                 $mapping->versionDate(),
                 $mapping->authorisedBy(),
-                $cleanColumns
+                $cleanColumns,
+                $derived
             );
 
             return (new Response())

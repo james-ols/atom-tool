@@ -19,21 +19,25 @@ use RuntimeException;
  *   - Each individual value is cleaned (if a cleaner exists for the column)
  *     BEFORE joining, then non-empty values are joined with '|'.
  *
- * A 'parentId' column is derived automatically from the 'parentRefNo' function
- * when present, using the record's RefNo (customers can override the function).
+ * 'derived' columns are produced by running a CALM source through a named
+ * 'functions' entry and writing the result to a target column. Any number of
+ * derived arrows may be declared, each naming its own source, target and
+ * function; the engine treats them uniformly.
  */
 final class Mapping
 {
     /**
-     * @param array<string,string>            $fields    CALM element => AtoM column
-     * @param array<string,callable>          $clean     AtoM column => fn(string): string
-     * @param array<string,callable>          $functions name => callable
+     * @param array<string,string>                                 $fields    CALM element => AtoM column
+     * @param list<array{source:string,target:string,via:string}>  $derived   Functioned arrows
+     * @param array<string,callable>                               $clean     AtoM column => fn(string): string
+     * @param array<string,callable>                               $functions name => callable
      */
     private function __construct(
         private readonly string $version,
         private readonly string $versionDate,
         private readonly string $authorisedBy,
         private readonly array $fields,
+        private readonly array $derived,
         private readonly array $clean,
         private readonly array $functions,
     ) {
@@ -61,6 +65,7 @@ final class Mapping
             versionDate:  (string) ($block['versionDate'] ?? ''),
             authorisedBy: (string) ($block['authorisedBy'] ?? ''),
             fields:       $fields,
+            derived:      is_array($block['derived'] ?? null) ? $block['derived'] : [],
             clean:        is_array($block['clean'] ?? null) ? $block['clean'] : [],
             functions:    is_array($block['functions'] ?? null) ? $block['functions'] : [],
         );
@@ -82,14 +87,22 @@ final class Mapping
     }
 
     /**
-     * The set of CALM source element names this mapping consumes.
-     * Used by Preflight to decide which populated elements are "unmapped".
+     * The set of CALM source element names this mapping consumes: every source
+     * named in 'fields', plus every 'derived' source. Used by Preflight to
+     * decide which populated elements are "unmapped".
      *
      * @return list<string>
      */
     public function sourceKeys(): array
     {
-        return array_keys($this->fields);
+        $keys = array_keys($this->fields);
+        foreach ($this->derived as $arrow) {
+            $source = (string) ($arrow['source'] ?? '');
+            if ($source !== '' && !in_array($source, $keys, true)) {
+                $keys[] = $source;
+            }
+        }
+        return $keys;
     }
 
     /**
@@ -122,12 +135,20 @@ final class Mapping
             $row[$atomColumn] = implode('|', $values);
         }
 
-        // Derive parentId from the customer's parentRefNo() function, if any.
-        if (isset($this->functions['parentRefNo']) && is_callable($this->functions['parentRefNo'])) {
-            $flat = $this->flattenForFunction($record);
-            $parent = ($this->functions['parentRefNo'])($flat);
-            if (is_string($parent) && $parent !== '') {
-                $row['parentId'] = $parent;
+        // Derived columns: run each declared source through its named function
+        // and write the result to the declared target. Fully data-driven — the
+        // engine has no knowledge of any particular derived column.
+        $flat = null;
+        foreach ($this->derived as $arrow) {
+            $via = (string) ($arrow['via'] ?? '');
+            $target = (string) ($arrow['target'] ?? '');
+            if ($via === '' || $target === '' || !isset($this->functions[$via]) || !is_callable($this->functions[$via])) {
+                continue;
+            }
+            $flat ??= $this->flattenForFunction($record);
+            $result = ($this->functions[$via])($flat);
+            if (is_string($result) && $result !== '') {
+                $row[$target] = $result;
             }
         }
 
