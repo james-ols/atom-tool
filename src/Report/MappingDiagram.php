@@ -45,6 +45,11 @@ final class MappingDiagram
     private const NAVY = '#1e3a5f';
     private const BORDER = '#e5e7eb';
 
+    // "fn" dot colours: cleaners (per-value, generic) vs derived (record-level
+    // functions). Both are dark enough for the white "fn" label to stay legible.
+    private const CLEAN_DOT = '#6b21a8';   // purple
+    private const DERIVED_DOT = '#15803d'; // green
+
     /**
      * @param array<string,string>                                 $fields        CALM element => AtoM column
      * @param list<string>                                         $cleanColumns  AtoM columns that carry a treatment
@@ -147,15 +152,15 @@ final class MappingDiagram
             );
 
             // Treatment marker: a small "fn" dot on this flow, just before the
-            // arrowhead (kept off the crowded midpoint).
+            // arrowhead (kept off the crowded midpoint). Purple = per-value cleaner.
             if (isset($cleanSet[$target])) {
                 [$dotX, $dotY] = $this->pointOnFlow($x1, $y1, $ctrl, $x2, $y2, self::FN_DOT_T);
-                $svg[] = $this->fnDot($dotX, $dotY);
+                $svg[] = $this->fnDot($dotX, $dotY, self::CLEAN_DOT);
             }
         }
 
         // Derived arrows: an extra flow from source to target, always carrying
-        // the "fn" dot (a named function sits on it by definition).
+        // the "fn" dot (a named function sits on it by definition). Green = derived.
         foreach ($derived as $arrow) {
             $s = (string) ($arrow['source'] ?? '');
             $t = (string) ($arrow['target'] ?? '');
@@ -171,7 +176,7 @@ final class MappingDiagram
             );
             $svg[] = sprintf('<path d="M %d %d l -7 -4 l 0 8 z" fill="%s"/>', $x2, $y2, self::ORANGE);
             [$dotX, $dotY] = $this->pointOnFlow($x1, $y1, $ctrl, $x2, $y2, self::FN_DOT_T);
-            $svg[] = $this->fnDot($dotX, $dotY);
+            $svg[] = $this->fnDot($dotX, $dotY, self::DERIVED_DOT);
         }
 
         // Left boxes (sources) — CALM, navy outline.
@@ -228,11 +233,11 @@ final class MappingDiagram
      * A small filled navy circle with white "fn" — marks that a treatment
      * (cleaner/function) sits on this flow.
      */
-    private function fnDot(int $cx, int $cy): string
+    private function fnDot(int $cx, int $cy, string $fill = self::NAVY): string
     {
         $circle = sprintf(
             '<circle cx="%d" cy="%d" r="9" fill="%s"/>',
-            $cx, $cy, self::NAVY
+            $cx, $cy, $fill
         );
         $text = sprintf(
             '<text x="%d" y="%d" font-size="8" font-weight="700" fill="#ffffff" text-anchor="middle" dominant-baseline="central">fn</text>',
