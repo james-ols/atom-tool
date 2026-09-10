@@ -189,13 +189,17 @@ final class Application
             /** @var array<string,string> $fields */
             $fields = is_array($block['fields'] ?? null) ? $block['fields'] : [];
 
+            // AtoM columns that carry a treatment → their flow gets an "fn" dot.
+            $cleanColumns = is_array($block['clean'] ?? null) ? array_keys($block['clean']) : [];
+
             $diagram = new MappingDiagram();
             $svg = $diagram->render(
                 $fields,
                 ucfirst($pipeline),
                 $mapping->version(),
                 $mapping->versionDate(),
-                $mapping->authorisedBy()
+                $mapping->authorisedBy(),
+                $cleanColumns
             );
 
             return (new Response())
