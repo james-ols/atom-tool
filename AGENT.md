@@ -94,3 +94,98 @@ What Step 6 & 7 look like once the shape is locked
 Also lingering — smaller, from earlier
 Parent/child records: your sample XML has MI9861 (Collection) and MI9861/1 (Component/File). AtoM CSV import uses parentId (I think — you'll know) to build the hierarchy. Do we emit parentId derived from RefNo prefix matching? Worth explicit thought at Step 6c.
 Date normalisation: <Created>20/08/2026</Created> is DD/MM/YYYY, AtoM wants ISO. Handled as a gb166_date_iso function in the customer's mapping.php, or engine-provided? Given "no engine primitives" is the whole point of your design, probably the former.
+
+## build chat transcript
+Good design instinct — the floating dialog with dead space around it looks tentative; a panel that *snaps to fill the centre + preflight area* (everything right of the rail, below the banner) will feel intentional and give the diagram far more room. It also reinforces the mental model: the rail stays, and the diagram takes over the working area.
+
+The change is CSS-only. Right now `.diagram-overlay` centres a floating card with padding. I'll make it (a) start below the top bar + banner rather than at `top:0`, and (b) drop the card/padding so the white panel fills the region edge-to-edge.
+
+There's one number to get right: the overlay's `top`. Your shell rows are `56px` (topbar) + `120px` (banner) = **176px** before the content row. So the panel should start at `top: 176px` to sit exactly where the centre/preflight area begins, and `left: 80px` (past the rail) as before. That makes it fill precisely the `centre + preflight` cells.
+
+Here's the replacement for the `/* ---- Mapping diagram overlay ---- */` block in `app.css` — swap the existing overlay rules for these:
+
+```css
+/* ---- Mapping diagram overlay ---- */
+
+/* Rail must float above the overlay so its icons stay visible and clickable
+   (switch pipelines with the overlay open). */
+.app-rail {
+    position: relative;
+    z-index: 60;
+}
+
+/* The overlay snaps to fill the working area: everything right of the 80px
+   rail and below the 56px topbar + 120px banner (= 176px). No floating card,
+   no wasted margin — it reads as the diagram taking over the workspace. */
+.diagram-overlay {
+    position: fixed;
+    top: 176px;
+    left: 80px;
+    right: 0;
+    bottom: 0;
+    background: #ffffff;
+    border-top: 1px solid var(--ols-border);
+    border-left: 1px solid var(--ols-border);
+    display: flex;
+    flex-direction: column;
+    z-index: 50;
+}
+.diagram-overlay[hidden] {
+    display: none;
+}
+.diagram-overlay__card {
+    position: relative;
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+    min-height: 0;
+    overflow: auto;
+}
+.diagram-overlay__img {
+    max-width: 100%;
+    max-height: 100%;
+    width: auto;
+    height: auto;
+    display: block;
+}
+.diagram-overlay__close {
+    position: absolute;
+    top: 0.75rem;
+    right: 0.75rem;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    border: 1px solid var(--ols-border);
+    background: #ffffff;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+    color: var(--ols-ink);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1;
+}
+.diagram-overlay__close:hover {
+    color: var(--ols-orange-dark);
+}
+.diagram-overlay__close .material-symbols-rounded {
+    font-size: 20px;
+}
+```
+
+
+What changed vs. the previous version:
+- **`top: 176px`** (was `0`) — starts exactly at the content row, so the top bar and banner stay visible above it. The app still looks like itself; the diagram just fills the workspace.
+- **Solid white background** (was a dim `rgba` backdrop) — it's now a *panel*, not a modal scrim. No dead space, no darkening.
+- **No floating card** — the white fills the whole region; the SVG centres within it and scales to fit (`max-width/height: 100%`).
+- **Close button moved inside** the panel's top-right (was floating at `-14px`), now that there's no card to hang off.
+- Thin top/left borders to visually seat it against the topbar/banner and rail.
+
+Two small notes:
+- Because the background is now opaque white and it doesn't cover the banner/topbar, **clicking the backdrop to close** effectively means clicking empty panel space — which now *is* the diagram area, so I'd rely on the ✕ and Esc to close rather than backdrop-click (the JS backdrop-click still works, but there's less "backdrop" now). No JS change needed; ✕ and Esc already work.
+- The `176px` is coupled to your shell's `56px + 120px` rows. If you ever change those row heights, bump this `top` to match. (A CSS variable could formalise that later, but for now the literal is clear.)
+
+Reload after pasting, click Description, and the diagram should now fill the centre-plus-preflight area cleanly — no dialog framing, much more room for the fan-in arrows. If the SVG still looks small within the now-larger panel, that's just because it's scaling to fit a wider area while keeping its 1280×800 aspect — we can widen the diagram's internal usage (bigger boxes/font) to make better use of the space if you'd like, once you see it at full size.
+
