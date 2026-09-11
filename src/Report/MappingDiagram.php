@@ -50,10 +50,25 @@ final class MappingDiagram
     private const CLEAN_DOT = '#6b21a8';   // purple
     private const DERIVED_DOT = '#15803d'; // green
 
+        // Light-grey style for AtoM columns that exist in the template CSV but
+    // have no mapping arrow into them. Listed below the mapped block so the
+    // diagram shows the full target schema, not just what's currently wired.
+    private const UNMAPPED_STROKE = '#d1d5db'; // gray-300
+    private const UNMAPPED_TEXT   = '#9ca3af'; // gray-400
+
+        // Visual gap between the last mapped target and the first unmapped one,
+    // so the eye can tell the two blocks apart at a glance.
+    private const UNMAPPED_GAP = 20;
+
+
     /**
      * @param array<string,string>                                 $fields        CALM element => AtoM column
      * @param list<string>                                         $cleanColumns  AtoM columns that carry a treatment
      * @param list<array{source:string,target:string,via:string}>  $derived       Functioned arrows
+     * @param list<string>                                         $atomColumns   Full AtoM column list (CSV header order).
+     *                                                                            Columns not already targeted by 'fields'
+     *                                                                            or 'derived' appear below the mapped block
+     *                                                                            in light grey ("yet to be mapped").
      */
     public function render(
         array $fields,
@@ -62,34 +77,74 @@ final class MappingDiagram
         string $versionDate = '',
         string $authorisedBy = '',
         array $cleanColumns = [],
-        array $derived = []
+        array $derived = [],
+        array $atomColumns = []
     ): string {
         $sources = array_keys($fields);
-        $targets = [];
+
+        // Mapped targets, in mapping order: 'fields' values first (preserving
+        // first-appearance order), then any 'derived' targets not already seen.
+        $mappedTargets = [];
         foreach ($fields as $target) {
-            if (!in_array($target, $targets, true)) {
-                $targets[] = $target;
+            if (!in_array($target, $mappedTargets, true)) {
+                $mappedTargets[] = $target;
+            }
+        }
+        foreach ($derived as $arrow) {
+            $t = (string) ($arrow['target'] ?? '');
+            if ($t !== '' && !in_array($t, $mappedTargets, true)) {
+                $mappedTargets[] = $t;
+            }
+        }
+        $mappedSet = array_fill_keys($mappedTargets, true);
+
+        // Unmapped targets: everything in the CSV header that isn't already
+        // a mapped target, in CSV order. Empty when no CSV header is supplied.
+        $unmappedTargets = [];
+        foreach ($atomColumns as $col) {
+            $col = (string) $col;
+            if ($col === '' || isset($mappedSet[$col])) {
+                continue;
+            }
+            if (!in_array($col, $unmappedTargets, true)) {
+                $unmappedTargets[] = $col;
             }
         }
 
-        // Derived arrows may introduce sources/targets not present in 'fields'
-        // (e.g. parentId). Fold them in so every box has a home.
+        // The right column is mapped block on top, unmapped block below.
+        $targets = array_merge($mappedTargets, $unmappedTargets);
+
+        // Derived arrows may introduce sources not present in 'fields'
+        // (e.g. parentId's source). Fold them in so every box has a home.
         foreach ($derived as $arrow) {
             $s = (string) ($arrow['source'] ?? '');
-            $t = (string) ($arrow['target'] ?? '');
             if ($s !== '' && !in_array($s, $sources, true)) {
                 $sources[] = $s;
-            }
-            if ($t !== '' && !in_array($t, $targets, true)) {
-                $targets[] = $t;
             }
         }
 
         $leftY = $this->distribute(count($sources));
-        $rightY = $this->distribute(count($targets));
 
-        $rows = max(count($sources), count($targets));
-        $height = self::TOP + (max(0, $rows - 1) * self::ROW_PITCH) + self::BOX_H + self::BOTTOM_MARGIN;
+        // Right column Y positions: mapped block at the top, then a visible
+        // gap, then the unmapped block. Kept as a single array indexed the
+        // same as $targets so the arrow-drawing code below is unchanged.
+        $rightY = [];
+        for ($i = 0, $n = count($mappedTargets); $i < $n; $i++) {
+            $rightY[] = self::TOP + $i * self::ROW_PITCH;
+        }
+        $unmappedStart = count($mappedTargets) > 0
+            ? self::TOP + (count($mappedTargets) - 1) * self::ROW_PITCH + self::UNMAPPED_GAP + self::ROW_PITCH
+            : self::TOP;
+        for ($i = 0, $n = count($unmappedTargets); $i < $n; $i++) {
+            $rightY[] = $unmappedStart + $i * self::ROW_PITCH;
+        }
+
+        // Height accounts for the tallest of: left column, or the right column
+        // including the gap between the mapped and unmapped blocks.
+        $leftBottom  = count($sources) > 0 ? $leftY[count($sources) - 1] : self::TOP;
+        $rightBottom = count($rightY) > 0 ? $rightY[count($rightY) - 1] : self::TOP;
+        $bottom = max($leftBottom, $rightBottom);
+        $height = $bottom + (int) (self::BOX_H / 2) + self::BOTTOM_MARGIN;
         if ($height < 400) {
             $height = 400;
         }
@@ -183,9 +238,17 @@ final class MappingDiagram
         foreach ($sources as $i => $name) {
             $svg[] = $this->box(self::LEFT_X, $leftY[$i], self::COL_W, $name, self::NAVY, self::INK, 'left');
         }
-        // Right boxes (targets) — AtoM, orange outline.
+        // Right boxes (targets) — orange for mapped AtoM columns, light grey
+        // (dashed) below for CSV columns that are yet to be mapped.
         foreach ($targets as $i => $name) {
-            $svg[] = $this->box(self::RIGHT_X, $rightY[$i], self::COL_W, $name, self::ORANGE, self::INK, 'right');
+            if (isset($mappedSet[$name])) {
+                $svg[] = $this->box(self::RIGHT_X, $rightY[$i], self::COL_W, $name, self::ORANGE, self::INK, 'right');
+            } else {
+                $svg[] = $this->box(
+                    self::RIGHT_X, $rightY[$i], self::COL_W, $name,
+                    self::UNMAPPED_STROKE, self::UNMAPPED_TEXT, 'right', true
+                );
+            }
         }
 
         $svg[] = '</svg>';
@@ -246,12 +309,13 @@ final class MappingDiagram
         return $circle . $text;
     }
 
-    private function box(int $x, int $cy, int $w, string $label, string $stroke, string $textColor, string $align): string
+    private function box(int $x, int $cy, int $w, string $label, string $stroke, string $textColor, string $align, bool $dashed = false): string
     {
         $y = $cy - (int) (self::BOX_H / 2);
+        $dash = $dashed ? ' stroke-dasharray="4 3"' : '';
         $rect = sprintf(
-            '<rect x="%d" y="%d" width="%d" height="%d" rx="6" fill="#ffffff" stroke="%s" stroke-width="1.5"/>',
-            $x, $y, $w, self::BOX_H, $stroke
+            '<rect x="%d" y="%d" width="%d" height="%d" rx="6" fill="#ffffff" stroke="%s" stroke-width="1.5"%s/>',
+            $x, $y, $w, self::BOX_H, $stroke, $dash
         );
         if ($align === 'left') {
             $tx = $x + $w - 10;

@@ -193,6 +193,31 @@ final class Application
             $cleanColumns = is_array($block['clean'] ?? null) ? array_keys($block['clean']) : [];
             $derived = is_array($block['derived'] ?? null) ? $block['derived'] : [];
 
+            // Full AtoM column list from the template CSV header. This is the
+            // same file the /run handler treats as the authoritative column
+            // order; using it here lets the diagram list unmapped ("yet to be
+            // mapped") AtoM columns in light grey below the mapped block.
+            $atomColumns = [];
+            $templateFile = $this->config->templatesPath() . '/atom_' . $pipeline . '.csv';
+            if (is_file($templateFile)) {
+                $templateHandle = fopen($templateFile, 'rb');
+                if ($templateHandle !== false) {
+                    try {
+                        $header = fgetcsv($templateHandle, escape: '');
+                    } finally {
+                        fclose($templateHandle);
+                    }
+                    if (is_array($header)) {
+                        foreach ($header as $col) {
+                            $col = trim((string) $col);
+                            if ($col !== '') {
+                                $atomColumns[] = $col;
+                            }
+                        }
+                    }
+                }
+            }
+
             $diagram = new MappingDiagram();
             $svg = $diagram->render(
                 $fields,
@@ -201,7 +226,8 @@ final class Application
                 $mapping->versionDate(),
                 $mapping->authorisedBy(),
                 $cleanColumns,
-                $derived
+                $derived,
+                $atomColumns
             );
 
             return (new Response())
