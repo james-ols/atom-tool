@@ -88,8 +88,11 @@ final class Mapping
 
     /**
      * The set of CALM source element names this mapping consumes: every source
-     * named in 'fields', plus every 'derived' source. Used by Preflight to
-     * decide which populated elements are "unmapped".
+     * named in 'fields', plus every 'derived' source. A derived arrow may also
+     * declare extra elements it reads inside its function via an optional
+     * 'sources' list (e.g. a function that pulls several CALM elements the
+     * single 'source' can't express); those count as consumed too, so Preflight
+     * doesn't flag them as unmapped.
      *
      * @return list<string>
      */
@@ -97,9 +100,16 @@ final class Mapping
     {
         $keys = array_keys($this->fields);
         foreach ($this->derived as $arrow) {
-            $source = (string) ($arrow['source'] ?? '');
-            if ($source !== '' && !in_array($source, $keys, true)) {
-                $keys[] = $source;
+            $names = [(string) ($arrow['source'] ?? '')];
+            if (is_array($arrow['sources'] ?? null)) {
+                foreach ($arrow['sources'] as $extra) {
+                    $names[] = (string) $extra;
+                }
+            }
+            foreach ($names as $name) {
+                if ($name !== '' && !in_array($name, $keys, true)) {
+                    $keys[] = $name;
+                }
             }
         }
         return $keys;
