@@ -666,6 +666,87 @@ body {
     line-height: 1.35;
 }
 
+/* ---- Preflight: AtoM GO / NO GO final validation (stub UI) ---- */
+
+.preflight-gonogo {
+    margin-top: 1rem;
+    border-top: 1px solid var(--ols-border);
+    padding-top: 0.85rem;
+}
+.preflight-gonogo__row {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+.gonogo-btn {
+    flex: 0 0 auto;
+    width: 46px;
+    height: 40px;
+    border: 1px solid #374151;
+    border-radius: 8px;
+    /* Dark chip so the AtoM logo's tiny white lettering stays legible, with a
+       subtle top-light gradient + shadow to feel like a pressable button. */
+    background: linear-gradient(#4b5563, #374151);
+    box-shadow: 0 1px 1px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.12);
+    padding: 5px 8px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: border-color 0.15s, box-shadow 0.15s, transform 0.06s, background 0.15s;
+}
+.gonogo-btn:hover {
+    border-color: var(--ols-orange);
+    background: linear-gradient(#565f6b, #3f4753);
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.15);
+}
+.gonogo-btn:active {
+    transform: translateY(1px);
+    box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.4);
+    background: linear-gradient(#374151, #4b5563);
+}
+
+.gonogo-btn.is-busy {
+    opacity: 0.6;
+    cursor: progress;
+}
+.gonogo-btn__img {
+    max-width: 100%;
+    max-height: 100%;
+    display: block;
+}
+
+.gonogo-lights {
+    display: flex;
+    gap: 0.4rem;
+    flex: 1 1 auto;
+}
+.gonogo-light {
+    flex: 1 1 0;
+    text-align: center;
+    padding: 0.3rem 0.25rem;
+    border-radius: 6px;
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    background: #e5e7eb;          /* idle: grey */
+    color: #9ca3af;
+    border: 1px solid transparent;
+    transition: background-color 0.2s, color 0.2s, border-color 0.2s, box-shadow 0.2s;
+    user-select: none;
+}
+.gonogo-light--go.is-lit {
+    background: #dcfce7;
+    color: #15803d;
+    border-color: #86efac;
+    box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.15);
+}
+.gonogo-light--nogo.is-lit {
+    background: #fee2e2;
+    color: #b91c1c;
+    border-color: #fca5a5;
+    box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.15);
+}
 /* ---- Mapping diagram overlay ---- */
 
 /* Rail must float above the overlay so its icons stay visible and clickable

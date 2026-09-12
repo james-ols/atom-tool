@@ -1,4 +1,3 @@
-
 // AtoM Tool — client-side behaviour.
 (function () {
     'use strict';
@@ -208,7 +207,7 @@ document.querySelectorAll('.pipeline-selector').forEach(selector => {
                 });
                 if (groups.length > 20) {
                     const li = document.createElement('li');
-                    li.textContent = '…and ' + (groups.length - 20) + ' more';
+                    li.textContent = '...and ' + (groups.length - 20) + ' more';
                     collisionsList.appendChild(li);
                 }
 
@@ -316,5 +315,51 @@ document.querySelectorAll('.pipeline-selector').forEach(selector => {
     // Esc closes too.
     document.addEventListener('keydown', function (e) {
         if (e.key === 'Escape' && !overlay.hasAttribute('hidden')) close();
+    });
+})();
+
+// AtoM GO / NO GO final validation — STUB UI ONLY.
+// The button will later trigger an extracted subset of the AtoM codebase to do
+// a real final validation of the generated CSV. For now it just toggles the
+// lights so the three visual states can be seen: idle (both grey), GO (green),
+// NO GO (red). Replace the setTimeout stub with the real call when ready.
+(function () {
+    'use strict';
+
+    const runBtn = document.getElementById('gonogo-run');
+    const goLight = document.getElementById('gonogo-go');
+    const noGoLight = document.getElementById('gonogo-nogo');
+
+    if (!runBtn || !goLight || !noGoLight) {
+        return;
+    }
+
+    function reset() {
+        goLight.classList.remove('is-lit');
+        noGoLight.classList.remove('is-lit');
+    }
+
+    // STUB: alternate GO / NO GO on each click so both states are demoable.
+    // Real code will set `passed` from the validation result instead.
+    let stubToggle = false;
+
+    runBtn.addEventListener('click', function () {
+        reset();
+        runBtn.classList.add('is-busy');
+
+        // TODO: replace this simulated delay + toggle with the real AtoM
+        // final-validation request (POST to a new engine endpoint), then light
+        // GO on success or NO GO on any validation error.
+        setTimeout(function () {
+            runBtn.classList.remove('is-busy');
+            const passed = stubToggle;      // stub result
+            stubToggle = !stubToggle;
+
+            if (passed) {
+                goLight.classList.add('is-lit');
+            } else {
+                noGoLight.classList.add('is-lit');
+            }
+        }, 600);
     });
 })();

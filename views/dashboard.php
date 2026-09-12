@@ -273,6 +273,21 @@ ob_start();
                         </div>
                         <ul id="preflight-refno-collisions-list" class="preflight-alert__list"></ul>
                     </div>
+
+                    <div class="preflight-gonogo">
+                        <h3 class="preflight-subhead">AtoM final validation</h3>
+                        <div class="preflight-gonogo__row">
+                            <button type="button" id="gonogo-run" class="gonogo-btn"
+                                    title="Run AtoM final validation"
+                                    aria-label="Run AtoM final validation">
+                                <img src="/assets/img/atom_logo.png" alt="AtoM" class="gonogo-btn__img">
+                            </button>
+                            <div class="gonogo-lights">
+                                <span id="gonogo-go" class="gonogo-light gonogo-light--go">GO</span>
+                                <span id="gonogo-nogo" class="gonogo-light gonogo-light--nogo">NO GO</span>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </aside>

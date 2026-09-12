@@ -414,6 +414,37 @@ final class Application
             return Response::redirect('/');
         }));
 
+        // AtoM "final validation" GO / NO GO. STUB for now: it validates the
+        // named run's output CSV and returns a verdict. Later this will invoke
+        // an extracted subset of the AtoM codebase to do the real check; the
+        // request/response contract below is stable, so only the body changes.
+        //
+        // Request:  POST /gonogo  { runId: <uuid> }
+        // Response: JSON { ok: bool, errors: list<string> }
+        $router->post('/gonogo', $requireAuth(function (Request $request, Session $session): Response {
+            $runId = (string) $request->postParam('runId', '');
+
+            // Guard the identifier the same way /download does.
+            if (!preg_match('/^[0-9a-fA-F-]{36}$/', $runId)) {
+                return Response::json(['ok' => false, 'errors' => ['Invalid run identifier.']], 400);
+            }
+
+            $outputName = $runId . '.csv';
+            if ($this->storage->get(Storage::AREA_OUTPUTS, $outputName) === null) {
+                return Response::json(['ok' => false, 'errors' => ['Output not found for this run.']], 404);
+            }
+
+            // TODO: run the extracted AtoM final-validation subset against the
+            // output CSV here, collecting any errors. For now, STUB: always GO.
+            $errors = [];
+
+            return Response::json([
+                'ok'     => $errors === [],
+                'errors' => $errors,
+            ]);
+        }));
+
+
         return $router;
     }
 
