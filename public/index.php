@@ -12,6 +12,19 @@ declare(strict_types=1);
 
 $factory = require __DIR__ . '/../bootstrap.php';
 
+// Composer autoloader (provides the AWS SDK for S3 storage). Guarded so the
+// engine still runs on a plain checkout without vendor/ (local-only, no S3).
+$composerAutoload = __DIR__ . '/../vendor/autoload.php';
+if (is_file($composerAutoload)) {
+    require $composerAutoload;
+}
+
+// Small helper: read an env parameter with a fallback.
+$env = static function (string $key, string $default = ''): string {
+    $v = getenv($key);
+    return $v === false ? $default : $v;
+};
+
 $app = $factory(new AtomTool\Config(
     customerCode: 'dev',
     customerRoot: __DIR__ . '/..',

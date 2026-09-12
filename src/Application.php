@@ -15,6 +15,7 @@ use AtomTool\Report\MappingDiagram;
 use AtomTool\Storage\LocalStorage;
 use AtomTool\Storage\Manifest;
 use AtomTool\Storage\Storage;
+use AtomTool\Storage\StorageFactory;
 use AtomTool\Support\Uuid;
 
 /**
@@ -29,7 +30,7 @@ final class Application
     public function __construct(
         private readonly Config $config,
     ) {
-        $this->storage = new LocalStorage($this->config->storageRoot());
+        $this->storage = StorageFactory::fromConfig($this->config);
         $this->manifest = new Manifest($this->storage);
     }
 
