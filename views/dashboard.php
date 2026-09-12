@@ -64,7 +64,7 @@ ob_start();
                 <img src="/assets/img/logo.png" alt="" class="app-topbar__logo">
                 <span class="app-topbar__wordmark">
                 <strong>AtoM Tool</strong>
-                <span class="app-topbar__by">by Orange Leaf Systems</span>
+                <span class="app-topbar__by">by Orangeleaf Systems Ltd</span>
             </span>
             </div>
             <div class="app-topbar__user">
@@ -177,7 +177,7 @@ ob_start();
                                                         &middot;
                                                         <?= htmlspecialchars($p['date'], ENT_QUOTES, 'UTF-8') ?>
                                                         &middot;
-                                                        Approved by <?= htmlspecialchars($p['approver'], ENT_QUOTES, 'UTF-8') ?>
+                                                        <?= htmlspecialchars($p['approver'], ENT_QUOTES, 'UTF-8') ?>
                                                     </div>
                                                 </button>
                                             <?php endforeach; ?>
