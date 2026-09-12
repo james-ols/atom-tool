@@ -265,6 +265,14 @@ ob_start();
                     <ul id="preflight-unmapped" class="preflight-unmapped"></ul>
 
                     <p id="preflight-provenance" class="preflight-provenance"></p>
+
+                    <div id="preflight-refno-collisions" class="preflight-alert" hidden>
+                        <div class="preflight-alert__head">
+                            <span class="material-symbols-rounded preflight-alert__icon">warning</span>
+                            <span>RefNo Collision Detected</span>
+                        </div>
+                        <ul id="preflight-refno-collisions-list" class="preflight-alert__list"></ul>
+                    </div>
                 </div>
             </div>
         </aside>

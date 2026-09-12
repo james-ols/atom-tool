@@ -1,3 +1,4 @@
+
 // AtoM Tool — client-side behaviour.
 (function () {
     'use strict';
@@ -118,6 +119,9 @@ document.querySelectorAll('.pipeline-selector').forEach(selector => {
     const provenanceEl = document.getElementById('preflight-provenance');
     const unpinBtn = document.getElementById('preflight-unpin');
 
+    const collisionsBox = document.getElementById('preflight-refno-collisions');
+    const collisionsList = document.getElementById('preflight-refno-collisions-list');
+
     if (!content || !empty || !arc || !pctEl || !summaryEl || !unmappedEl || !provenanceEl) {
         return;
     }
@@ -181,6 +185,38 @@ document.querySelectorAll('.pipeline-selector').forEach(selector => {
         if (m.versionDate) bits.push(m.versionDate);
         if (m.authorisedBy) bits.push('approved by ' + m.authorisedBy);
         provenanceEl.textContent = bits.join(' · ');
+
+        // RefNo collision warning (only shown when collisions were found).
+        if (collisionsBox && collisionsList) {
+            const col = report.refNoCollisions || {};
+            const groups = Array.isArray(col.groups) ? col.groups : [];
+            const count = typeof col.count === 'number' ? col.count : groups.length;
+
+            if (count > 0) {
+                collisionsList.innerHTML = '';
+                groups.slice(0, 20).forEach(function (g) {
+                    // variants is { rawRefNo: recordId }; show each on its own
+                    // line as "RefNo - RecordID" (RecordID is the only value
+                    // that lets a cataloguer find the record at source).
+                    const variants = g && g.variants ? g.variants : {};
+                    Object.keys(variants).forEach(function (refNo) {
+                        const recordId = variants[refNo] || '';
+                        const li = document.createElement('li');
+                        li.textContent = recordId ? refNo + ' - ' + recordId : refNo;
+                        collisionsList.appendChild(li);
+                    });
+                });
+                if (groups.length > 20) {
+                    const li = document.createElement('li');
+                    li.textContent = '…and ' + (groups.length - 20) + ' more';
+                    collisionsList.appendChild(li);
+                }
+
+                collisionsBox.removeAttribute('hidden');
+            } else {
+                collisionsBox.setAttribute('hidden', '');
+            }
+        }
 
         empty.setAttribute('hidden', '');
         content.removeAttribute('hidden');
