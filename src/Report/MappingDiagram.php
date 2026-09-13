@@ -50,25 +50,25 @@ final class MappingDiagram
     private const CLEAN_DOT = '#6b21a8';   // purple
     private const DERIVED_DOT = '#15803d'; // green
 
-        // Light-grey style for AtoM columns that exist in the template CSV but
+    // Light-grey style for AtoM columns that exist in the template CSV but
     // have no mapping arrow into them. Listed below the mapped block so the
     // diagram shows the full target schema, not just what's currently wired.
     private const UNMAPPED_STROKE = '#d1d5db'; // gray-300
     private const UNMAPPED_TEXT   = '#9ca3af'; // gray-400
 
-        // Visual gap between the last mapped target and the first unmapped one,
+    // Visual gap between the last mapped target and the first unmapped one,
     // so the eye can tell the two blocks apart at a glance.
     private const UNMAPPED_GAP = 20;
 
 
     /**
-     * @param array<string,string>                                 $fields        CALM element => AtoM column
-     * @param list<string>                                         $cleanColumns  AtoM columns that carry a treatment
-     * @param list<array{source:string,target:string,via:string}>  $derived       Functioned arrows
-     * @param list<string>                                         $atomColumns   Full AtoM column list (CSV header order).
-     *                                                                            Columns not already targeted by 'fields'
-     *                                                                            or 'derived' appear below the mapped block
-     *                                                                            in light grey ("yet to be mapped").
+     * @param array<string,string>                                              $fields        CALM element => AtoM column
+     * @param list<string>                                                      $cleanColumns  AtoM columns that carry a treatment
+     * @param list<array{source:string,target:string,via:string,sources?:list<string>}>  $derived       Functioned arrows
+     * @param list<string>                                                      $atomColumns   Full AtoM column list (CSV header order).
+     *                                                                                         Columns not already targeted by 'fields'
+     *                                                                                         or 'derived' appear below the mapped block
+     *                                                                                         in light grey ("yet to be mapped").
      */
     public function render(
         array $fields,
@@ -116,10 +116,17 @@ final class MappingDiagram
 
         // Derived arrows may introduce sources not present in 'fields'
         // (e.g. parentId's source). Fold them in so every box has a home.
+        // A derived arrow may also declare a plural 'sources' list naming the
+        // extra CALM elements its function reads (which the single 'source'
+        // can't express); those are real left-hand inputs too, so give each of
+        // them a box as well — otherwise they'd silently vanish from the CALM
+        // side even though the engine consumes them. Mirrors
+        // Mapping::sourceKeys().
         foreach ($derived as $arrow) {
-            $s = (string) ($arrow['source'] ?? '');
-            if ($s !== '' && !in_array($s, $sources, true)) {
-                $sources[] = $s;
+            foreach ($this->derivedSources($arrow) as $s) {
+                if ($s !== '' && !in_array($s, $sources, true)) {
+                    $sources[] = $s;
+                }
             }
         }
 
@@ -216,22 +223,29 @@ final class MappingDiagram
 
         // Derived arrows: an extra flow from source to target, always carrying
         // the "fn" dot (a named function sits on it by definition). Green = derived.
+        // Each arrow draws a flow from its singular 'source' AND from every
+        // element in its optional plural 'sources' list, so a many-in derived
+        // column (e.g. alternativeIdentifiers) shows all its CALM inputs.
         foreach ($derived as $arrow) {
-            $s = (string) ($arrow['source'] ?? '');
             $t = (string) ($arrow['target'] ?? '');
-            $si = array_search($s, $sources, true);
-            if ($si === false || !isset($targetY[$t])) {
+            if (!isset($targetY[$t])) {
                 continue;
             }
-            $y1 = $leftY[$si];
             $y2 = $targetY[$t];
-            $svg[] = sprintf(
-                '<path d="M %d %d C %d %d, %d %d, %d %d" fill="none" stroke="%s" stroke-width="1.5" opacity="0.85"/>',
-                $x1, $y1, $x1 + $ctrl, $y1, $x2 - $ctrl, $y2, $x2, $y2, self::ORANGE
-            );
-            $svg[] = sprintf('<path d="M %d %d l -7 -4 l 0 8 z" fill="%s"/>', $x2, $y2, self::ORANGE);
-            [$dotX, $dotY] = $this->pointOnFlow($x1, $y1, $ctrl, $x2, $y2, self::FN_DOT_T);
-            $svg[] = $this->fnDot($dotX, $dotY, self::DERIVED_DOT);
+            foreach ($this->derivedSources($arrow) as $s) {
+                $si = array_search($s, $sources, true);
+                if ($s === '' || $si === false) {
+                    continue;
+                }
+                $y1 = $leftY[$si];
+                $svg[] = sprintf(
+                    '<path d="M %d %d C %d %d, %d %d, %d %d" fill="none" stroke="%s" stroke-width="1.5" opacity="0.85"/>',
+                    $x1, $y1, $x1 + $ctrl, $y1, $x2 - $ctrl, $y2, $x2, $y2, self::ORANGE
+                );
+                $svg[] = sprintf('<path d="M %d %d l -7 -4 l 0 8 z" fill="%s"/>', $x2, $y2, self::ORANGE);
+                [$dotX, $dotY] = $this->pointOnFlow($x1, $y1, $ctrl, $x2, $y2, self::FN_DOT_T);
+                $svg[] = $this->fnDot($dotX, $dotY, self::DERIVED_DOT);
+            }
         }
 
         // Left boxes (sources) — CALM, navy outline.
@@ -266,6 +280,27 @@ final class MappingDiagram
             $ys[] = self::TOP + $i * self::ROW_PITCH;
         }
         return $ys;
+    }
+
+    /**
+     * The CALM elements a derived arrow reads: its single 'source' plus any
+     * elements declared in an optional plural 'sources' list (functions that
+     * pull several elements the single 'source' can't express). Mirrors
+     * Mapping::sourceKeys() so the diagram shows exactly what the engine
+     * consumes.
+     *
+     * @param array<string,mixed> $arrow
+     * @return list<string>
+     */
+    private function derivedSources(array $arrow): array
+    {
+        $names = [(string) ($arrow['source'] ?? '')];
+        if (is_array($arrow['sources'] ?? null)) {
+            foreach ($arrow['sources'] as $extra) {
+                $names[] = (string) $extra;
+            }
+        }
+        return $names;
     }
 
     /**
