@@ -11,6 +11,8 @@ use AtomTool\Mapping\Mapping;
 use AtomTool\Parser\CalmStreamParser;
 use AtomTool\Report\Collisions;
 use AtomTool\Report\Coverage;
+use AtomTool\Report\CsvStructuralValidator;
+use AtomTool\Report\ValidationResult;
 use AtomTool\Report\MappingDiagram;
 use AtomTool\Storage\LocalStorage;
 use AtomTool\Storage\Manifest;
@@ -415,7 +417,7 @@ final class Application
             return Response::redirect('/');
         }));
 
-        // AtoM "final validation" GO / NO GO. STUB for now: it validates the
+        // AtoM "final validation" GO / NO GO. it validates the
         // named run's output CSV and returns a verdict. Later this will invoke
         // an extracted subset of the AtoM codebase to do the real check; the
         // request/response contract below is stable, so only the body changes.
@@ -435,16 +437,36 @@ final class Application
                 return Response::json(['ok' => false, 'errors' => ['Output not found for this run.']], 404);
             }
 
-            // TODO: run the extracted AtoM final-validation subset against the
-            // output CSV here, collecting any errors. For now, STUB: always GO.
+            // Read the stored output CSV and run AtoM's offline structural
+            // validators (no DB / no AtoM runtime needed). GO when there are no
+            // warnings or errors; otherwise NO GO with the collected messages.
+            $stream = $this->storage->openRead(Storage::AREA_OUTPUTS, $outputName);
+            try {
+                $csv = (string) stream_get_contents($stream);
+            } finally {
+                fclose($stream);
+            }
+
+            $report = (new CsvStructuralValidator())->validateString($csv);
+
             $errors = [];
+            foreach ($report['results'] as $result) {
+                if ($result->status === ValidationResult::INFO) {
+                    continue;
+                }
+                foreach (array_merge($result->results, $result->details) as $line) {
+                    $errors[] = $result->title . ': ' . $line;
+                }
+            }
 
             return Response::json([
-                'ok'     => $errors === [],
-                'errors' => $errors,
+                'ok'         => $report['ok'],
+                'warnCount'  => $report['warnCount'],
+                'errorCount' => $report['errorCount'],
+                'errors'     => $errors,
+                'text'       => $report['text'],
             ]);
         }));
-
 
         return $router;
     }

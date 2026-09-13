@@ -1,3 +1,4 @@
+
 // AtoM Tool — client-side behaviour.
 (function () {
     'use strict';
@@ -132,13 +133,26 @@ document.querySelectorAll('.pipeline-selector').forEach(selector => {
 
     let pinnedPlane = null;
 
+    // GO / NO GO is transient: whenever the preflight view changes (a different
+    // plane is hovered, pinned, or the panel returns to empty), clear any prior
+    // validation verdict so the operator must click "Run AtoM final validation"
+    // again for the run now on screen. The lamp IIFE installs this hook.
+    function resetGoNoGo() {
+        if (typeof window.__resetGoNoGo === 'function') {
+            window.__resetGoNoGo();
+        }
+    }
+
     function showEmpty() {
         content.setAttribute('hidden', '');
         empty.removeAttribute('hidden');
         if (unpinBtn) unpinBtn.setAttribute('hidden', '');
+        resetGoNoGo();
     }
 
     function render(report) {
+        resetGoNoGo();
+
         const cov = report.coverage || {};
         const pct = typeof cov.percentMapped === 'number' ? cov.percentMapped : 0;
         const present = cov.presentCount ?? 0;
@@ -318,11 +332,13 @@ document.querySelectorAll('.pipeline-selector').forEach(selector => {
     });
 })();
 
-// AtoM GO / NO GO final validation — STUB UI ONLY.
-// The button will later trigger an extracted subset of the AtoM codebase to do
-// a real final validation of the generated CSV. For now it just toggles the
-// lights so the three visual states can be seen: idle (both grey), GO (green),
-// NO GO (red). Replace the setTimeout stub with the real call when ready.
+// AtoM GO / NO GO final validation.
+// Fully transient: the verdict is never retained. Any change to the preflight
+// view (hover / pin a different plane, or the panel returning to empty) clears
+// the lamps via window.__resetGoNoGo, so the operator must click the button
+// again for whatever run is currently on screen. The run to validate is read at
+// click time from the pinned plane (if any), else the selected table row's
+// plane — never a cached value.
 (function () {
     'use strict';
 
@@ -337,29 +353,97 @@ document.querySelectorAll('.pipeline-selector').forEach(selector => {
     function reset() {
         goLight.classList.remove('is-lit');
         noGoLight.classList.remove('is-lit');
+        goLight.title = '';
+        noGoLight.title = '';
+        runBtn.classList.remove('is-busy');
     }
 
-    // STUB: alternate GO / NO GO on each click so both states are demoable.
-    // Real code will set `passed` from the validation result instead.
-    let stubToggle = false;
+    // Let the preflight panel clear our verdict when its view changes.
+    window.__resetGoNoGo = reset;
+
+    // Read the report for the run the user is actually looking at:
+    //   1) the pinned plane (is-active), if any;
+    //   2) otherwise the selected table row's plane.
+    function currentReport() {
+        let plane = document.querySelector('.preflight-plane.is-active');
+
+        if (!plane) {
+            const radio = document.querySelector('input[name="selected_file"]:checked');
+            const row = radio ? radio.closest('tr') : null;
+            plane = row ? row.querySelector('.preflight-plane') : null;
+        }
+
+        if (!plane) {
+            return null;
+        }
+        try {
+            return JSON.parse(plane.getAttribute('data-report') || '');
+        } catch (e) {
+            return null;
+        }
+    }
 
     runBtn.addEventListener('click', function () {
         reset();
+
+        const report = currentReport();
+        const runId = report && report.runId ? report.runId : '';
+        if (!runId) {
+            noGoLight.classList.add('is-lit');
+            noGoLight.title = 'Select a run first: choose a row (or pin its plane) that has been run.';
+            return;
+        }
+
         runBtn.classList.add('is-busy');
 
-        // TODO: replace this simulated delay + toggle with the real AtoM
-        // final-validation request (POST to a new engine endpoint), then light
-        // GO on success or NO GO on any validation error.
-        setTimeout(function () {
-            runBtn.classList.remove('is-busy');
-            const passed = stubToggle;      // stub result
-            stubToggle = !stubToggle;
+        const body = new URLSearchParams();
+        body.set('runId', runId);
 
-            if (passed) {
-                goLight.classList.add('is-lit');
-            } else {
+        fetch('/gonogo', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: body.toString()
+        })
+            .then(function (res) { return res.json(); })
+            .then(function (data) {
+                runBtn.classList.remove('is-busy');
+
+                const when = new Date().toLocaleTimeString();
+
+                if (data && data.ok) {
+                    goLight.classList.add('is-lit');
+
+                    // Prove it ran: show the full per-check report (each check's
+                    // title + [INFO] status) plus a pass summary and timestamp.
+                    const lines = [];
+                    lines.push('GO — AtoM structural validation passed.');
+                    lines.push('Checked at ' + when + ' · run ' + runId.slice(0, 8) + '…');
+                    lines.push('Warnings: ' + (data.warnCount ?? 0) + ' · Errors: ' + (data.errorCount ?? 0));
+                    if (data.text) {
+                        lines.push('');
+                        lines.push('Checks run:');
+                        lines.push(data.text);
+                    }
+                    goLight.title = lines.join('\n');
+                } else {
+                    noGoLight.classList.add('is-lit');
+
+                    const errs = (data && Array.isArray(data.errors)) ? data.errors : [];
+                    const lines = [];
+                    lines.push('NO GO — AtoM structural validation failed.');
+                    lines.push('Checked at ' + when + ' · run ' + runId.slice(0, 8) + '…');
+                    lines.push('Warnings: ' + (data.warnCount ?? 0) + ' · Errors: ' + (data.errorCount ?? 0));
+                    if (errs.length) {
+                        lines.push('');
+                        lines.push(errs.join('\n'));
+                    }
+                    noGoLight.title = lines.join('\n');
+                }
+            })
+            .catch(function () {
+                runBtn.classList.remove('is-busy');
                 noGoLight.classList.add('is-lit');
-            }
-        }, 600);
+                noGoLight.title = 'NO GO: request failed.';
+            });
     });
 })();
