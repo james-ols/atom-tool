@@ -13,6 +13,7 @@
  *     latestRun: array<string,mixed>|null,
  *     report: array<string,mixed>|null
  *   }> $uploads              Uploaded CALM files (manifest-shaped), newest first.
+ *     string $mappingPath      Absolute path to the customer's mapping.php.
  */
 declare(strict_types=1);
 
@@ -20,18 +21,46 @@ declare(strict_types=1);
 /** @var string $customerCode */
 /** @var string $engineVersion */
 /** @var list<array<string,mixed>> $uploads */
+/** @var string $mappingPath */
 
 $title = 'Dashboard';
 $bodyClass = 'dashboard-body';
 
-$pipelines = [
-        ['key' => 'description',   'icon' => 'description',     'label' => 'Description',                    'version' => 'v1.2', 'date' => '2024-03-15', 'approver' => 'JG'],
-        ['key' => 'accession',     'icon' => 'inventory_2',     'label' => 'Accession',                      'version' => 'v1.1', 'date' => '2024-03-10', 'approver' => 'JG'],
-        ['key' => 'authority',     'icon' => 'person',          'label' => 'Authority Record',               'version' => 'v1.0', 'date' => '2024-03-01', 'approver' => 'JG'],
-        ['key' => 'authority_rel', 'icon' => 'hub',             'label' => 'Authority Relationships',        'version' => 'v1.0', 'date' => '2024-03-01', 'approver' => 'JG'],
-        ['key' => 'events',        'icon' => 'event',           'label' => 'Events',                         'version' => 'v1.0', 'date' => '2024-02-28', 'approver' => 'JG'],
-        ['key' => 'institutions',  'icon' => 'account_balance', 'label' => 'Archival Institutions',          'version' => 'v1.0', 'date' => '2024-02-28', 'approver' => 'JG'],
+// Display concern owned by the dashboard: which icon + label each pipeline
+// gets in the rail and selector. Keyed by the mapping.php pipeline key. Keeps
+// mapping.php free of UI constructs — it only carries the mapping and its
+// provenance (version / versionDate / authorisedBy).
+$pipelineDisplay = [
+        'description'   => ['icon' => 'description',     'label' => 'Description'],
+        'accession'     => ['icon' => 'inventory_2',     'label' => 'Accession'],
+        'authority'     => ['icon' => 'person',          'label' => 'Authority Record'],
+        'authority_rel' => ['icon' => 'hub',             'label' => 'Authority Relationships'],
+        'events'        => ['icon' => 'event',           'label' => 'Events'],
+        'institutions'  => ['icon' => 'account_balance', 'label' => 'Archival Institutions'],
 ];
+
+// Selector rows come straight from mapping.php (the single source of truth for
+// provenance), joined to the dashboard's own icon/label choice above.
+$pipelines = [];
+if (is_file($mappingPath)) {
+    /** @var array<string,mixed> $allPipelines */
+    $allPipelines = require $mappingPath;
+    foreach ($allPipelines as $key => $block) {
+        if (!is_array($block)) {
+            continue;
+        }
+        $key = (string) $key;
+        $display = $pipelineDisplay[$key] ?? ['icon' => 'dataset', 'label' => ucfirst($key)];
+        $pipelines[] = [
+                'key'      => $key,
+                'icon'     => $display['icon'],
+                'label'    => $display['label'],
+                'version'  => (string) ($block['version'] ?? ''),
+                'date'     => (string) ($block['versionDate'] ?? ''),
+                'approver' => (string) ($block['authorisedBy'] ?? ''),
+        ];
+    }
+}
 
 $formatSize = static function (int $bytes): string {
     if ($bytes < 1024) {
@@ -234,7 +263,9 @@ ob_start();
         <aside class="app-preflight" aria-label="Preflight report">
             <header class="app-preflight__header">
                 <span class="material-symbols-rounded">flight</span>
-                <span>Preflight</span>
+                <span>Preflight
+                <a id="preflight-report-link" class="preflight-report-link" href="#" hidden download
+                   title="Download the preflight report (.preflight.txt) for audit &amp; provenance">[Report]</a></span>
                 <button type="button" id="preflight-unpin" class="preflight-unpin" hidden title="Unpin">
                     <span class="material-symbols-rounded">close</span>
                 </button>

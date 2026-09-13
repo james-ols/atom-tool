@@ -118,6 +118,7 @@ document.querySelectorAll('.pipeline-selector').forEach(selector => {
     const unmappedEl = document.getElementById('preflight-unmapped');
     const provenanceEl = document.getElementById('preflight-provenance');
     const unpinBtn = document.getElementById('preflight-unpin');
+    const reportLink = document.getElementById('preflight-report-link');
 
     const collisionsBox = document.getElementById('preflight-refno-collisions');
     const collisionsList = document.getElementById('preflight-refno-collisions-list');
@@ -147,6 +148,10 @@ document.querySelectorAll('.pipeline-selector').forEach(selector => {
         content.setAttribute('hidden', '');
         empty.removeAttribute('hidden');
         if (unpinBtn) unpinBtn.setAttribute('hidden', '');
+        if (reportLink) {
+            reportLink.setAttribute('hidden', '');
+            reportLink.removeAttribute('href');
+        }
         resetGoNoGo();
     }
 
@@ -196,9 +201,21 @@ document.querySelectorAll('.pipeline-selector').forEach(selector => {
         const bits = [];
         if (m.version) bits.push('Mapping v' + m.version);
         if (m.versionDate) bits.push(m.versionDate);
-        if (m.authorisedBy) bits.push('approved by ' + m.authorisedBy);
+        if (m.authorisedBy) bits.push('by ' + m.authorisedBy);
         provenanceEl.textContent = bits.join(' · ');
 
+        // Report download link: point at the stored <runId>.preflight.txt for
+        // this run so the operator can grab it for audit / provenance.
+        if (reportLink) {
+            const runId = report.runId ? String(report.runId) : '';
+            if (runId) {
+                reportLink.href = '/report?runId=' + encodeURIComponent(runId);
+                reportLink.removeAttribute('hidden');
+            } else {
+                reportLink.setAttribute('hidden', '');
+                reportLink.removeAttribute('href');
+            }
+        }
         // RefNo collision warning (only shown when collisions were found).
         if (collisionsBox && collisionsList) {
             const col = report.refNoCollisions || {};

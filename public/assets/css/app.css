@@ -482,6 +482,22 @@ body {
     font-size: 20px;
     color: var(--ols-orange);
 }
+
+.preflight-report-link {
+    margin-left: auto;
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--ols-orange);
+    text-decoration: none;
+    white-space: nowrap;
+}
+.preflight-report-link:hover {
+    color: var(--ols-orange-dark);
+    text-decoration: underline;
+}
+.preflight-report-link[hidden] {
+    display: none;
+}
 .app-preflight__body {
     padding: 1rem;
     overflow-y: auto;
