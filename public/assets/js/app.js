@@ -1,4 +1,5 @@
 
+
 // AtoM Tool — client-side behaviour.
 (function () {
     'use strict';
@@ -141,6 +142,11 @@ document.querySelectorAll('.pipeline-selector').forEach(selector => {
 
     let pinnedPlane = null;
 
+    // The runId of whatever report is currently rendered. Captured by render()
+    // and used by the CALM source-row peek so a clicked RecordID knows which run
+    // (hence which stored CALM XML) to look in.
+    let currentRunId = '';
+
     // GO / NO GO is transient: whenever the preflight view changes (a different
     // plane is hovered, pinned, or the panel returns to empty), clear any prior
     // validation verdict so the operator must click "Run AtoM final validation"
@@ -162,12 +168,110 @@ document.querySelectorAll('.pipeline-selector').forEach(selector => {
         resetGoNoGo();
     }
 
+    // ---- CALM source-row peek dialog -------------------------------------
+    // A small, read-only popup showing the SOURCE CALM record behind a warning,
+    // fetched on demand from /record and truncated server-side. Built once and
+    // reused. Closes via its X, a backdrop click, or Esc.
+    const peek = (function buildPeekDialog() {
+        const overlay = document.createElement('div');
+        overlay.className = 'record-peek';
+        overlay.setAttribute('hidden', '');
+
+        const card = document.createElement('div');
+        card.className = 'record-peek__card';
+
+        const header = document.createElement('div');
+        header.className = 'record-peek__header';
+        const title = document.createElement('span');
+        title.className = 'record-peek__title';
+        const closeBtn = document.createElement('button');
+        closeBtn.type = 'button';
+        closeBtn.className = 'record-peek__close';
+        closeBtn.title = 'Close';
+        closeBtn.setAttribute('aria-label', 'Close');
+        closeBtn.textContent = '✕';
+        header.appendChild(title);
+        header.appendChild(closeBtn);
+
+        const bodyEl = document.createElement('div');
+        bodyEl.className = 'record-peek__body';
+
+        card.appendChild(header);
+        card.appendChild(bodyEl);
+        overlay.appendChild(card);
+        document.body.appendChild(overlay);
+
+        function close() {
+            overlay.setAttribute('hidden', '');
+            bodyEl.innerHTML = '';
+        }
+        function setMessage(msg) {
+            bodyEl.innerHTML = '';
+            const p = document.createElement('p');
+            p.className = 'record-peek__message';
+            p.textContent = msg;
+            bodyEl.appendChild(p);
+        }
+        function setFields(fields) {
+            bodyEl.innerHTML = '';
+            const dl = document.createElement('dl');
+            dl.className = 'record-peek__fields';
+            (fields || []).forEach(function (f) {
+                const dt = document.createElement('dt');
+                dt.textContent = f && f.name ? f.name : '';
+                const dd = document.createElement('dd');
+                dd.textContent = f && f.value ? f.value : '';
+                if (f && f.truncated) {
+                    dd.classList.add('is-truncated');
+                    dd.title = 'Truncated to 30 characters — open the XML for the full value';
+                }
+                dl.appendChild(dt);
+                dl.appendChild(dd);
+            });
+            bodyEl.appendChild(dl);
+        }
+
+        closeBtn.addEventListener('click', close);
+        overlay.addEventListener('click', function (e) {
+            if (e.target === overlay) close();
+        });
+        document.addEventListener('keydown', function (e) {
+            if (e.key === 'Escape' && !overlay.hasAttribute('hidden')) close();
+        });
+
+        function open(runId, recordId) {
+            if (!runId || !recordId) return;
+            title.textContent = recordId;
+            setMessage('Loading…');
+            overlay.removeAttribute('hidden');
+
+            const qs = '?runId=' + encodeURIComponent(runId) +
+                '&recordId=' + encodeURIComponent(recordId);
+            fetch('/record' + qs, { headers: { 'Accept': 'application/json' } })
+                .then(function (res) { return res.json(); })
+                .then(function (data) {
+                    if (data && data.ok) {
+                        setFields(data.fields);
+                    } else {
+                        setMessage((data && data.error) ? data.error : 'Record not found.');
+                    }
+                })
+                .catch(function () {
+                    setMessage('Request failed.');
+                });
+        }
+
+        return { open: open };
+    })();
+
     // Shared renderer for every preflight warning box (collisions, orphans,
-    // dates, levels, …). Given the box + its <ul>, an array of already-computed
-    // display strings, and the true total, it fills the list (capped), appends
-    // "...and N more" when truncated, and shows/hides the box. Adding a new
-    // scanner box therefore means: compute its lines, then call this once.
-    function renderAlertBox(box, list, lines, total) {
+    // dates, levels, …). Each "line" is an object { text, recordId } — when a
+    // recordId is present, the matching token in the text is rendered as a
+    // clickable button that opens the CALM source-row peek. Plain strings are
+    // also accepted (treated as text with no recordId). Fills the list (capped),
+    // appends "...and N more" when truncated, and shows/hides the box. Adding a
+    // new scanner box therefore means: build its line objects, then call once.
+    function renderAlertBox(box, list, lines, total, runId) {
         if (!box || !list) {
             return;
         }
@@ -179,9 +283,36 @@ document.querySelectorAll('.pipeline-selector').forEach(selector => {
 
         list.innerHTML = '';
         const shown = lines.slice(0, ALERT_LIMIT);
-        shown.forEach(function (text) {
+        shown.forEach(function (entry) {
+            const text = (entry && typeof entry === 'object') ? (entry.text || '') : String(entry);
+            const recordId = (entry && typeof entry === 'object') ? (entry.recordId || '') : '';
             const li = document.createElement('li');
-            li.textContent = text;
+
+            // If this line carries a RecordID and that RecordID appears in the
+            // text, render the RecordID portion as a clickable peek button and
+            // leave the rest as plain text. Otherwise, just show the text.
+            const at = recordId ? text.indexOf(recordId) : -1;
+            if (recordId && runId && at !== -1) {
+                if (at > 0) {
+                    li.appendChild(document.createTextNode(text.slice(0, at)));
+                }
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'record-peek-link';
+                btn.textContent = recordId;
+                btn.title = 'Show the source CALM record';
+                btn.addEventListener('click', function () {
+                    peek.open(runId, recordId);
+                });
+                li.appendChild(btn);
+                const after = text.slice(at + recordId.length);
+                if (after) {
+                    li.appendChild(document.createTextNode(after));
+                }
+            } else {
+                li.textContent = text;
+            }
+
             list.appendChild(li);
         });
         if (count > shown.length) {
@@ -203,6 +334,8 @@ document.querySelectorAll('.pipeline-selector').forEach(selector => {
 
     function render(report) {
         resetGoNoGo();
+
+        currentRunId = report.runId ? String(report.runId) : '';
 
         const cov = report.coverage || {};
         const pct = typeof cov.percentMapped === 'number' ? cov.percentMapped : 0;
@@ -275,10 +408,13 @@ document.querySelectorAll('.pipeline-selector').forEach(selector => {
                 Object.keys(variants).forEach(function (refNo) {
                     total++;
                     const recordId = variants[refNo] || '';
-                    lines.push(recordId ? refNo + ' - ' + recordId : refNo);
+                    lines.push({
+                        text: recordId ? refNo + ' - ' + recordId : refNo,
+                        recordId: recordId
+                    });
                 });
             });
-            renderAlertBox(collisionsBox, collisionsList, lines, total);
+            renderAlertBox(collisionsBox, collisionsList, lines, total, currentRunId);
         }
 
         // Orphan warning (parent RefNo missing from this file). Warning only:
@@ -296,9 +432,9 @@ document.querySelectorAll('.pipeline-selector').forEach(selector => {
                 if (recordId) {
                     text += ' - ' + recordId;
                 }
-                return text;
+                return { text: text, recordId: recordId };
             });
-            renderAlertBox(orphansBox, orphansList, lines, count);
+            renderAlertBox(orphansBox, orphansList, lines, count, currentRunId);
         }
 
         // Date values to review. Warning only: populated CALM date values that
@@ -319,26 +455,38 @@ document.querySelectorAll('.pipeline-selector').forEach(selector => {
                 const entries = Array.isArray(dodgy[field]) ? dodgy[field] : [];
                 entries.forEach(function (e) {
                     const value = e && e.value ? e.value : '';
-                    const loc = locator(e && e.refNo, e && e.recordId);
-                    lines.push(field + ': ' + value + (loc ? '  (' + loc + ')' : ''));
+                    const recordId = e && e.recordId ? e.recordId : '';
+                    const loc = locator(e && e.refNo, recordId);
+                    lines.push({
+                        text: field + ': ' + value + (loc ? '  (' + loc + ')' : ''),
+                        recordId: recordId
+                    });
                 });
             });
             // Range inversion: DateEarliest after DateLatest.
             inverted.forEach(function (e) {
                 const earliest = e && e.earliest ? e.earliest : '';
                 const latest = e && e.latest ? e.latest : '';
-                const loc = locator(e && e.refNo, e && e.recordId);
-                lines.push('Inverted range: ' + earliest + ' → ' + latest + (loc ? '  (' + loc + ')' : ''));
+                const recordId = e && e.recordId ? e.recordId : '';
+                const loc = locator(e && e.refNo, recordId);
+                lines.push({
+                    text: 'Inverted range: ' + earliest + ' → ' + latest + (loc ? '  (' + loc + ')' : ''),
+                    recordId: recordId
+                });
             });
             // Partial range: one of DateEarliest / DateLatest missing.
             partial.forEach(function (e) {
                 const have = e && e.have ? e.have : '';
                 const missing = e && e.missing ? e.missing : '';
-                const loc = locator(e && e.refNo, e && e.recordId);
-                lines.push('Partial range: have ' + have + ', missing ' + missing + (loc ? '  (' + loc + ')' : ''));
+                const recordId = e && e.recordId ? e.recordId : '';
+                const loc = locator(e && e.refNo, recordId);
+                lines.push({
+                    text: 'Partial range: have ' + have + ', missing ' + missing + (loc ? '  (' + loc + ')' : ''),
+                    recordId: recordId
+                });
             });
 
-            renderAlertBox(datesBox, datesList, lines, count);
+            renderAlertBox(datesBox, datesList, lines, count, currentRunId);
         }
 
         // Levels to review. Warning only: CALM Level values not in AtoM's default
@@ -353,6 +501,7 @@ document.querySelectorAll('.pipeline-selector').forEach(selector => {
                 const value = c && c.value ? c.value : '';
                 const n = c && typeof c.count === 'number' ? c.count : 0;
                 const casingOnly = !!(c && c.casingOnly);
+                const recordId = c && c.recordId ? c.recordId : '';
                 let text = value;
                 if (n > 0) {
                     text += ' ×' + n;
@@ -360,13 +509,13 @@ document.querySelectorAll('.pipeline-selector').forEach(selector => {
                 if (casingOnly) {
                     text += ' (casing differs)';
                 }
-                const loc = locator(c && c.refNo, c && c.recordId);
+                const loc = locator(c && c.refNo, recordId);
                 if (loc) {
                     text += '  (' + loc + ')';
                 }
-                return text;
+                return { text: text, recordId: recordId };
             });
-            renderAlertBox(levelsBox, levelsList, lines, count);
+            renderAlertBox(levelsBox, levelsList, lines, count, currentRunId);
         }
 
         empty.setAttribute('hidden', '');

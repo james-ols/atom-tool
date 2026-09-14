@@ -644,7 +644,7 @@ body {
     border: 1px solid var(--ols-border);
     border-radius: 10px;
     padding: 0.6rem 0.75rem;
-    font-size: 0.75rem;
+    font-size: 0.68rem;
 }
 .preflight-alert__head {
     display: flex;
@@ -845,4 +845,126 @@ body {
 }
 .diagram-overlay__close .material-symbols-rounded {
     font-size: 20px;
+}
+
+/* ---- CALM source-row peek (clickable RecordID → tiny record dialog) ---- */
+
+/* The RecordID token inside a preflight alert line. Rendered as a button so
+   it's keyboard-focusable; styled as a subtle monospace link. */
+.record-peek-link {
+    background: transparent;
+    border: none;
+    padding: 0;
+    margin: 0;
+    font: inherit;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    color: var(--ols-orange-dark);
+    text-decoration: underline dotted;
+    text-underline-offset: 2px;
+    cursor: pointer;
+}
+.record-peek-link:hover,
+.record-peek-link:focus {
+    color: var(--ols-orange);
+    text-decoration: underline;
+    outline: none;
+}
+
+/* Backdrop: dims the whole viewport and centres the small dialog card. */
+.record-peek {
+    position: fixed;
+    inset: 0;
+    background: rgba(17, 24, 39, 0.45);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+    z-index: 80;                 /* above the diagram overlay (50/60) */
+}
+.record-peek[hidden] {
+    display: none;
+}
+.record-peek__card {
+    background: #ffffff;
+    border: 1px solid var(--ols-border);
+    border-radius: 10px;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.25);
+    width: 460px;
+    max-width: 100%;
+    max-height: 80vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+.record-peek__header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.55rem 0.75rem;
+    border-bottom: 1px solid var(--ols-border);
+    background: #fafafa;
+}
+.record-peek__title {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: var(--ols-ink);
+    word-break: break-all;
+    line-height: 1.3;
+}
+.record-peek__close {
+    margin-left: auto;
+    flex: 0 0 auto;
+    background: transparent;
+    border: none;
+    color: var(--ols-muted);
+    font-size: 0.9rem;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0.15rem 0.25rem;
+    border-radius: 4px;
+}
+.record-peek__close:hover {
+    color: var(--ols-orange-dark);
+    background: #f3f4f6;
+}
+.record-peek__body {
+    padding: 0.5rem 0.75rem 0.75rem;
+    overflow-y: auto;
+}
+.record-peek__message {
+    margin: 0.25rem 0;
+    font-size: 0.75rem;
+    color: var(--ols-muted);
+    font-style: italic;
+}
+
+/* Field list: tight two-column grid, very small monospace so long records
+   stay compact. Values are already truncated to 30 chars server-side. */
+.record-peek__fields {
+    display: grid;
+    grid-template-columns: minmax(90px, 34%) 1fr;
+    gap: 0.1rem 0.6rem;
+    margin: 0;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.68rem;
+    line-height: 1.35;
+}
+.record-peek__fields dt {
+    grid-column: 1;
+    color: var(--ols-muted);
+    font-weight: 600;
+    word-break: break-word;
+}
+.record-peek__fields dd {
+    grid-column: 2;
+    margin: 0;
+    color: var(--ols-ink);
+    word-break: break-word;
+}
+.record-peek__fields dd.is-truncated {
+    cursor: help;
+}
+.record-peek__fields dd.is-truncated::after {
+    content: '';
 }

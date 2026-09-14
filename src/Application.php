@@ -517,7 +517,95 @@ final class Application
             ]);
         }));
 
+        $router->get('/record', $requireAuth(function (Request $request, Session $session): Response {
+            $runId    = (string) $request->queryParam('runId', '');
+            $recordId = (string) $request->queryParam('recordId', '');
+
+            if (!preg_match('/^[0-9a-fA-F-]{36}$/', $runId)) {
+                return Response::json(['ok' => false, 'error' => 'Invalid run identifier.'], 400);
+            }
+            $recordId = trim($recordId);
+            if ($recordId === '' || strlen($recordId) > 128 || !preg_match('/^[A-Za-z0-9._:\/-]+$/', $recordId)) {
+                return Response::json(['ok' => false, 'error' => 'Invalid record identifier.'], 400);
+            }
+
+            $reportName = $runId . '.preflight.txt';
+            if ($this->storage->get(Storage::AREA_REPORTS, $reportName) === null) {
+                return Response::json(['ok' => false, 'error' => 'Report not found for this run.'], 404);
+            }
+            $stream = $this->storage->openRead(Storage::AREA_REPORTS, $reportName);
+            try {
+                $json = (string) stream_get_contents($stream);
+            } finally {
+                fclose($stream);
+            }
+            $decoded = json_decode($json, true);
+            $uploadId = is_array($decoded) ? (string) ($decoded['uploadId'] ?? '') : '';
+            if ($uploadId === '') {
+                return Response::json(['ok' => false, 'error' => 'Run report is missing its upload reference.'], 404);
+            }
+
+            $xmlName = $uploadId . '.xml';
+            if ($this->storage->get(Storage::AREA_UPLOADS, $xmlName) === null) {
+                return Response::json(['ok' => false, 'error' => 'Source CALM file not found.'], 404);
+            }
+
+            $parser = new CalmStreamParser();
+            $inStream = $this->storage->openRead(Storage::AREA_UPLOADS, $xmlName);
+            $match = null;
+            try {
+                foreach ($parser->parse($inStream) as $record) {
+                    $id = trim((string) (($record['RecordID'][0]) ?? ''));
+                    if ($id === $recordId) {
+                        $match = $record;
+                        break;
+                    }
+                }
+            } finally {
+                fclose($inStream);
+            }
+
+            if ($match === null) {
+                return Response::json(['ok' => false, 'error' => 'Record not found in the source CALM file.'], 404);
+            }
+
+            return Response::json([
+                'ok'       => true,
+                'recordId' => $recordId,
+                'fields'   => $this->previewRecord($match),
+            ]);
+        }));
+
         return $router;
+    }
+
+    /**
+     * Build a small, truncated preview of a parsed CALM record for the /record
+     * peek dialog. Read-only: NEVER changes source data; only shortens values
+     * for display so a long Description doesn't fill the dialog. First value of
+     * each populated element, trimmed, truncated to 30 chars with an ellipsis.
+     *
+     * @param array<string, list<string>> $record childName => list<string>
+     * @return list<array{name:string,value:string,truncated:bool}>
+     */
+    private function previewRecord(array $record): array
+    {
+        $max = 30;
+        $out = [];
+        foreach ($record as $name => $values) {
+            $first = trim((string) (($values[0]) ?? ''));
+            if ($first === '') {
+                continue;
+            }
+            $truncated = mb_strlen($first) > $max;
+            $value = $truncated ? mb_substr($first, 0, $max) . '…' : $first;
+            $out[] = [
+                'name'      => (string) $name,
+                'value'     => $value,
+                'truncated' => $truncated,
+            ];
+        }
+        return $out;
     }
 
     /**
