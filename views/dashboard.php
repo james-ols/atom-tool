@@ -305,6 +305,19 @@ ob_start();
                         <ul id="preflight-refno-collisions-list" class="preflight-alert__list"></ul>
                     </div>
 
+                    <div id="preflight-orphans" class="preflight-alert preflight-alert--warn" hidden>
+                        <div class="preflight-alert__head">
+                            <span class="material-symbols-rounded preflight-alert__icon preflight-alert__icon--warn">warning</span>
+                            <span>Possible Orphans (warning)</span>
+                        </div>
+                        <p class="preflight-alert__note">
+                            Parent RefNo not found in this file. This is expected for a
+                            partial export &mdash; the parent may arrive with the full load.
+                        </p>
+                        <ul id="preflight-orphans-list" class="preflight-alert__list"></ul>
+                    </div>
+
+
                     <div class="preflight-gonogo">
                         <h3 class="preflight-subhead">AtoM final validation</h3>
                         <div class="preflight-gonogo__row">

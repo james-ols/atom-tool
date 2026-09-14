@@ -669,6 +669,22 @@ body {
         animation: none;
     }
 }
+.preflight-alert--warn {
+    border-color: #fde68a;
+    background: #fffbeb;
+}
+.preflight-alert__icon--warn {
+    color: #f5c518;      /* steady warning yellow */
+    animation: none;     /* cancel the collision box's pulsing alarm */
+    transform: none;
+}
+.preflight-alert__note {
+    margin: 0.35rem 0 0;
+    font-size: 0.72rem;
+    color: var(--ols-muted);
+    line-height: 1.4;
+}
+
 .preflight-alert__list {
     list-style: none;
     padding: 0;

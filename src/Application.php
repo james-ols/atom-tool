@@ -12,6 +12,7 @@ use AtomTool\Parser\CalmStreamParser;
 use AtomTool\Report\Collisions;
 use AtomTool\Report\Coverage;
 use AtomTool\Report\CsvStructuralValidator;
+use AtomTool\Report\Orphans;
 use AtomTool\Report\ValidationResult;
 use AtomTool\Report\MappingDiagram;
 use AtomTool\Storage\LocalStorage;
@@ -373,6 +374,7 @@ final class Application
             $csv = fopen('php://temp', 'r+b');
             $coverage = new Coverage();
             $collisions = new Collisions();
+            $orphans = new Orphans();
 
             fputcsv($csv, $header, escape: '');
 
@@ -382,6 +384,7 @@ final class Application
                 foreach ($parser->parse($inStream) as $record) {
                     $coverage->observe($record);
                     $collisions->observe($record);
+                    $orphans->observe($record);
                     $mapped = $mapping->mapRecord($record);
                     $line = [];
                     foreach ($header as $column) {
@@ -403,6 +406,7 @@ final class Application
             // Preflight coverage report (JSON inside a .preflight.txt file).
             $summary = $coverage->summarise($mapping->sourceKeys());
             $refNoCollisions = $collisions->summarise();
+            $orphanReport = $orphans->summarise();
             $ranAt = date('c');
             $report = [
                 'runId'        => $runId,
@@ -421,6 +425,7 @@ final class Application
                 'mapped'       => $summary['mapped'],
                 'unmapped'     => $summary['unmapped'],
                 'refNoCollisions' => $refNoCollisions,
+                'orphans'      => $orphanReport,
                 'mapping'      => [
                     'version'      => $mapping->version(),
                     'versionDate'  => $mapping->versionDate(),

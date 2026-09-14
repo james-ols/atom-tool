@@ -122,6 +122,8 @@ document.querySelectorAll('.pipeline-selector').forEach(selector => {
 
     const collisionsBox = document.getElementById('preflight-refno-collisions');
     const collisionsList = document.getElementById('preflight-refno-collisions-list');
+    const orphansBox = document.getElementById('preflight-orphans');
+    const orphansList = document.getElementById('preflight-orphans-list');
 
     if (!content || !empty || !arc || !pctEl || !summaryEl || !unmappedEl || !provenanceEl) {
         return;
@@ -245,6 +247,41 @@ document.querySelectorAll('.pipeline-selector').forEach(selector => {
                 collisionsBox.removeAttribute('hidden');
             } else {
                 collisionsBox.setAttribute('hidden', '');
+            }
+        }
+
+        // Orphan warning (parent RefNo missing from this file). Warning only:
+        // a partial CALM export legitimately lacks parents that arrive later.
+        if (orphansBox && orphansList) {
+            const orph = report.orphans || {};
+            const list = Array.isArray(orph.orphans) ? orph.orphans : [];
+            const count = typeof orph.count === 'number' ? orph.count : list.length;
+
+            if (count > 0) {
+                orphansList.innerHTML = '';
+                list.slice(0, 20).forEach(function (o) {
+                    // Show "childRefNo → parentRefNo - RecordID" so the
+                    // cataloguer sees both the record and the parent it wants.
+                    const refNo = o && o.refNo ? o.refNo : '';
+                    const parent = o && o.parent ? o.parent : '';
+                    const recordId = o && o.recordId ? o.recordId : '';
+                    const li = document.createElement('li');
+                    let text = refNo + ' → ' + parent;
+                    if (recordId) {
+                        text += ' - ' + recordId;
+                    }
+                    li.textContent = text;
+                    orphansList.appendChild(li);
+                });
+                if (list.length > 20) {
+                    const li = document.createElement('li');
+                    li.textContent = '...and ' + (list.length - 20) + ' more';
+                    orphansList.appendChild(li);
+                }
+
+                orphansBox.removeAttribute('hidden');
+            } else {
+                orphansBox.setAttribute('hidden', '');
             }
         }
 
