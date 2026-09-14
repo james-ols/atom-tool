@@ -317,6 +317,17 @@ ob_start();
                         <ul id="preflight-orphans-list" class="preflight-alert__list"></ul>
                     </div>
 
+                    <div id="preflight-dates" class="preflight-alert preflight-alert--warn" hidden>
+                        <div class="preflight-alert__head">
+                            <span class="material-symbols-rounded preflight-alert__icon preflight-alert__icon--warn">warning</span>
+                            <span>Date values to review (warning)</span>
+                        </div>
+                        <p class="preflight-alert__note">
+                            Populated date values that may not import cleanly to AtoM.
+                            Fix at source in CALM, or accept clean-up in AtoM later.
+                        </p>
+                        <ul id="preflight-dates-list" class="preflight-alert__list"></ul>
+                    </div>
 
                     <div class="preflight-gonogo">
                         <h3 class="preflight-subhead">AtoM final validation</h3>

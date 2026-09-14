@@ -124,6 +124,8 @@ document.querySelectorAll('.pipeline-selector').forEach(selector => {
     const collisionsList = document.getElementById('preflight-refno-collisions-list');
     const orphansBox = document.getElementById('preflight-orphans');
     const orphansList = document.getElementById('preflight-orphans-list');
+    const datesBox = document.getElementById('preflight-dates');
+    const datesList = document.getElementById('preflight-dates-list');
 
     if (!content || !empty || !arc || !pctEl || !summaryEl || !unmappedEl || !provenanceEl) {
         return;
@@ -282,6 +284,93 @@ document.querySelectorAll('.pipeline-selector').forEach(selector => {
                 orphansBox.removeAttribute('hidden');
             } else {
                 orphansBox.setAttribute('hidden', '');
+            }
+        }
+
+        // Date values to review. Warning only: populated CALM date values that
+        // may not import cleanly to AtoM. Signal-only — nothing shown for empty
+        // or clean values. Fix at source in CALM, or accept clean-up in AtoM.
+        if (datesBox && datesList) {
+            const dates = report.dates || {};
+            const dodgy = dates.dodgy || {};       // { field: [ {value, refNo, recordId} ] }
+            const inverted = Array.isArray(dates.inverted) ? dates.inverted : [];
+            const partial = Array.isArray(dates.partial) ? dates.partial : [];
+            const count = typeof dates.count === 'number'
+                ? dates.count
+                : (inverted.length + partial.length);
+
+            if (count > 0) {
+                datesList.innerHTML = '';
+
+                let shown = 0;
+                const LIMIT = 20;
+
+                // Dodgy content, grouped per field. Show as
+                // "Field: value  (RefNo - RecordID)" so a cataloguer can find it.
+                Object.keys(dodgy).forEach(function (field) {
+                    const entries = Array.isArray(dodgy[field]) ? dodgy[field] : [];
+                    entries.forEach(function (e) {
+                        if (shown >= LIMIT) return;
+                        const value = e && e.value ? e.value : '';
+                        const refNo = e && e.refNo ? e.refNo : '';
+                        const recordId = e && e.recordId ? e.recordId : '';
+                        const li = document.createElement('li');
+                        let text = field + ': ' + value;
+                        const loc = recordId ? refNo + ' - ' + recordId : refNo;
+                        if (loc) {
+                            text += '  (' + loc + ')';
+                        }
+                        li.textContent = text;
+                        datesList.appendChild(li);
+                        shown++;
+                    });
+                });
+
+                // Range inversion: DateEarliest after DateLatest.
+                inverted.forEach(function (e) {
+                    if (shown >= LIMIT) return;
+                    const refNo = e && e.refNo ? e.refNo : '';
+                    const recordId = e && e.recordId ? e.recordId : '';
+                    const earliest = e && e.earliest ? e.earliest : '';
+                    const latest = e && e.latest ? e.latest : '';
+                    const li = document.createElement('li');
+                    let text = 'Inverted range: ' + earliest + ' → ' + latest;
+                    const loc = recordId ? refNo + ' - ' + recordId : refNo;
+                    if (loc) {
+                        text += '  (' + loc + ')';
+                    }
+                    li.textContent = text;
+                    datesList.appendChild(li);
+                    shown++;
+                });
+
+                // Partial range: one of DateEarliest / DateLatest missing.
+                partial.forEach(function (e) {
+                    if (shown >= LIMIT) return;
+                    const refNo = e && e.refNo ? e.refNo : '';
+                    const recordId = e && e.recordId ? e.recordId : '';
+                    const have = e && e.have ? e.have : '';
+                    const missing = e && e.missing ? e.missing : '';
+                    const li = document.createElement('li');
+                    let text = 'Partial range: have ' + have + ', missing ' + missing;
+                    const loc = recordId ? refNo + ' - ' + recordId : refNo;
+                    if (loc) {
+                        text += '  (' + loc + ')';
+                    }
+                    li.textContent = text;
+                    datesList.appendChild(li);
+                    shown++;
+                });
+
+                if (count > shown) {
+                    const li = document.createElement('li');
+                    li.textContent = '...and ' + (count - shown) + ' more';
+                    datesList.appendChild(li);
+                }
+
+                datesBox.removeAttribute('hidden');
+            } else {
+                datesBox.setAttribute('hidden', '');
             }
         }
 

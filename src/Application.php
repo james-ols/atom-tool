@@ -12,6 +12,7 @@ use AtomTool\Parser\CalmStreamParser;
 use AtomTool\Report\Collisions;
 use AtomTool\Report\Coverage;
 use AtomTool\Report\CsvStructuralValidator;
+use AtomTool\Report\Dates;
 use AtomTool\Report\Orphans;
 use AtomTool\Report\ValidationResult;
 use AtomTool\Report\MappingDiagram;
@@ -375,6 +376,7 @@ final class Application
             $coverage = new Coverage();
             $collisions = new Collisions();
             $orphans = new Orphans();
+            $dates = new Dates();
 
             fputcsv($csv, $header, escape: '');
 
@@ -385,6 +387,7 @@ final class Application
                     $coverage->observe($record);
                     $collisions->observe($record);
                     $orphans->observe($record);
+                    $dates->observe($record);
                     $mapped = $mapping->mapRecord($record);
                     $line = [];
                     foreach ($header as $column) {
@@ -407,6 +410,7 @@ final class Application
             $summary = $coverage->summarise($mapping->sourceKeys());
             $refNoCollisions = $collisions->summarise();
             $orphanReport = $orphans->summarise();
+            $dateReport = $dates->summarise();
             $ranAt = date('c');
             $report = [
                 'runId'        => $runId,
@@ -426,6 +430,7 @@ final class Application
                 'unmapped'     => $summary['unmapped'],
                 'refNoCollisions' => $refNoCollisions,
                 'orphans'      => $orphanReport,
+                'dates'        => $dateReport,
                 'mapping'      => [
                     'version'      => $mapping->version(),
                     'versionDate'  => $mapping->versionDate(),
