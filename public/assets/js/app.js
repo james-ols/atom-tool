@@ -56,7 +56,6 @@ document.querySelectorAll('.pipeline-selector').forEach(selector => {
     const trigger = selector.querySelector('.pipeline-selector__trigger');
     const dropdown = selector.querySelector('.pipeline-selector__dropdown');
     const hiddenInput = selector.querySelector('.pipeline-select');
-    const placeholder = selector.querySelector('.pipeline-selector__placeholder');
     const options = selector.querySelectorAll('.pipeline-selector__option');
 
     if (!trigger || !dropdown || !hiddenInput) return;
@@ -138,6 +137,8 @@ document.querySelectorAll('.pipeline-selector').forEach(selector => {
     arc.style.strokeDasharray = String(CIRC);
     arc.style.strokeDashoffset = String(CIRC); // start empty
 
+    const ALERT_LIMIT = 20; // max lines shown in any preflight alert box
+
     let pinnedPlane = null;
 
     // GO / NO GO is transient: whenever the preflight view changes (a different
@@ -159,6 +160,45 @@ document.querySelectorAll('.pipeline-selector').forEach(selector => {
             reportLink.removeAttribute('href');
         }
         resetGoNoGo();
+    }
+
+    // Shared renderer for every preflight warning box (collisions, orphans,
+    // dates, levels, …). Given the box + its <ul>, an array of already-computed
+    // display strings, and the true total, it fills the list (capped), appends
+    // "...and N more" when truncated, and shows/hides the box. Adding a new
+    // scanner box therefore means: compute its lines, then call this once.
+    function renderAlertBox(box, list, lines, total) {
+        if (!box || !list) {
+            return;
+        }
+        const count = typeof total === 'number' ? total : lines.length;
+        if (count <= 0) {
+            box.setAttribute('hidden', '');
+            return;
+        }
+
+        list.innerHTML = '';
+        const shown = lines.slice(0, ALERT_LIMIT);
+        shown.forEach(function (text) {
+            const li = document.createElement('li');
+            li.textContent = text;
+            list.appendChild(li);
+        });
+        if (count > shown.length) {
+            const li = document.createElement('li');
+            li.textContent = '...and ' + (count - shown.length) + ' more';
+            list.appendChild(li);
+        }
+        box.removeAttribute('hidden');
+    }
+
+    // "RefNo - RecordID" locator suffix (RecordID is what lets a cataloguer find
+    // the record at source). Returns '' when neither is present.
+    function locator(refNo, recordId) {
+        if (recordId) {
+            return refNo ? refNo + ' - ' + recordId : recordId;
+        }
+        return refNo || '';
     }
 
     function render(report) {
@@ -222,204 +262,111 @@ document.querySelectorAll('.pipeline-selector').forEach(selector => {
                 reportLink.removeAttribute('href');
             }
         }
-        // RefNo collision warning (only shown when collisions were found).
-        if (collisionsBox && collisionsList) {
+
+        // RefNo collision warning (only shown when collisions were found). One
+        // list line per raw RefNo variant, as "RefNo - RecordID".
+        {
             const col = report.refNoCollisions || {};
             const groups = Array.isArray(col.groups) ? col.groups : [];
-            const count = typeof col.count === 'number' ? col.count : groups.length;
-
-            if (count > 0) {
-                collisionsList.innerHTML = '';
-                groups.slice(0, 20).forEach(function (g) {
-                    // variants is { rawRefNo: recordId }; show each on its own
-                    // line as "RefNo - RecordID" (RecordID is the only value
-                    // that lets a cataloguer find the record at source).
-                    const variants = g && g.variants ? g.variants : {};
-                    Object.keys(variants).forEach(function (refNo) {
-                        const recordId = variants[refNo] || '';
-                        const li = document.createElement('li');
-                        li.textContent = recordId ? refNo + ' - ' + recordId : refNo;
-                        collisionsList.appendChild(li);
-                    });
+            const lines = [];
+            let total = 0;
+            groups.forEach(function (g) {
+                const variants = g && g.variants ? g.variants : {};
+                Object.keys(variants).forEach(function (refNo) {
+                    total++;
+                    const recordId = variants[refNo] || '';
+                    lines.push(recordId ? refNo + ' - ' + recordId : refNo);
                 });
-                if (groups.length > 20) {
-                    const li = document.createElement('li');
-                    li.textContent = '...and ' + (groups.length - 20) + ' more';
-                    collisionsList.appendChild(li);
-                }
-
-                collisionsBox.removeAttribute('hidden');
-            } else {
-                collisionsBox.setAttribute('hidden', '');
-            }
+            });
+            renderAlertBox(collisionsBox, collisionsList, lines, total);
         }
 
         // Orphan warning (parent RefNo missing from this file). Warning only:
         // a partial CALM export legitimately lacks parents that arrive later.
-        if (orphansBox && orphansList) {
+        {
             const orph = report.orphans || {};
             const list = Array.isArray(orph.orphans) ? orph.orphans : [];
             const count = typeof orph.count === 'number' ? orph.count : list.length;
-
-            if (count > 0) {
-                orphansList.innerHTML = '';
-                list.slice(0, 20).forEach(function (o) {
-                    // Show "childRefNo → parentRefNo - RecordID" so the
-                    // cataloguer sees both the record and the parent it wants.
-                    const refNo = o && o.refNo ? o.refNo : '';
-                    const parent = o && o.parent ? o.parent : '';
-                    const recordId = o && o.recordId ? o.recordId : '';
-                    const li = document.createElement('li');
-                    let text = refNo + ' → ' + parent;
-                    if (recordId) {
-                        text += ' - ' + recordId;
-                    }
-                    li.textContent = text;
-                    orphansList.appendChild(li);
-                });
-                if (list.length > 20) {
-                    const li = document.createElement('li');
-                    li.textContent = '...and ' + (list.length - 20) + ' more';
-                    orphansList.appendChild(li);
+            const lines = list.map(function (o) {
+                // "childRefNo → parentRefNo - RecordID"
+                const refNo = o && o.refNo ? o.refNo : '';
+                const parent = o && o.parent ? o.parent : '';
+                const recordId = o && o.recordId ? o.recordId : '';
+                let text = refNo + ' → ' + parent;
+                if (recordId) {
+                    text += ' - ' + recordId;
                 }
-
-                orphansBox.removeAttribute('hidden');
-            } else {
-                orphansBox.setAttribute('hidden', '');
-            }
+                return text;
+            });
+            renderAlertBox(orphansBox, orphansList, lines, count);
         }
 
         // Date values to review. Warning only: populated CALM date values that
         // may not import cleanly to AtoM. Signal-only — nothing shown for empty
         // or clean values. Fix at source in CALM, or accept clean-up in AtoM.
-        if (datesBox && datesList) {
+        {
             const dates = report.dates || {};
-            const dodgy = dates.dodgy || {};       // { field: [ {value, refNo, recordId} ] }
+            const dodgy = dates.dodgy || {};   // { field: [ {value, refNo, recordId} ] }
             const inverted = Array.isArray(dates.inverted) ? dates.inverted : [];
             const partial = Array.isArray(dates.partial) ? dates.partial : [];
             const count = typeof dates.count === 'number'
                 ? dates.count
                 : (inverted.length + partial.length);
 
-            if (count > 0) {
-                datesList.innerHTML = '';
-
-                let shown = 0;
-                const LIMIT = 20;
-
-                // Dodgy content, grouped per field. Show as
-                // "Field: value  (RefNo - RecordID)" so a cataloguer can find it.
-                Object.keys(dodgy).forEach(function (field) {
-                    const entries = Array.isArray(dodgy[field]) ? dodgy[field] : [];
-                    entries.forEach(function (e) {
-                        if (shown >= LIMIT) return;
-                        const value = e && e.value ? e.value : '';
-                        const refNo = e && e.refNo ? e.refNo : '';
-                        const recordId = e && e.recordId ? e.recordId : '';
-                        const li = document.createElement('li');
-                        let text = field + ': ' + value;
-                        const loc = recordId ? refNo + ' - ' + recordId : refNo;
-                        if (loc) {
-                            text += '  (' + loc + ')';
-                        }
-                        li.textContent = text;
-                        datesList.appendChild(li);
-                        shown++;
-                    });
+            const lines = [];
+            // Dodgy content, grouped per field: "Field: value  (RefNo - RecordID)".
+            Object.keys(dodgy).forEach(function (field) {
+                const entries = Array.isArray(dodgy[field]) ? dodgy[field] : [];
+                entries.forEach(function (e) {
+                    const value = e && e.value ? e.value : '';
+                    const loc = locator(e && e.refNo, e && e.recordId);
+                    lines.push(field + ': ' + value + (loc ? '  (' + loc + ')' : ''));
                 });
+            });
+            // Range inversion: DateEarliest after DateLatest.
+            inverted.forEach(function (e) {
+                const earliest = e && e.earliest ? e.earliest : '';
+                const latest = e && e.latest ? e.latest : '';
+                const loc = locator(e && e.refNo, e && e.recordId);
+                lines.push('Inverted range: ' + earliest + ' → ' + latest + (loc ? '  (' + loc + ')' : ''));
+            });
+            // Partial range: one of DateEarliest / DateLatest missing.
+            partial.forEach(function (e) {
+                const have = e && e.have ? e.have : '';
+                const missing = e && e.missing ? e.missing : '';
+                const loc = locator(e && e.refNo, e && e.recordId);
+                lines.push('Partial range: have ' + have + ', missing ' + missing + (loc ? '  (' + loc + ')' : ''));
+            });
 
-                // Range inversion: DateEarliest after DateLatest.
-                inverted.forEach(function (e) {
-                    if (shown >= LIMIT) return;
-                    const refNo = e && e.refNo ? e.refNo : '';
-                    const recordId = e && e.recordId ? e.recordId : '';
-                    const earliest = e && e.earliest ? e.earliest : '';
-                    const latest = e && e.latest ? e.latest : '';
-                    const li = document.createElement('li');
-                    let text = 'Inverted range: ' + earliest + ' → ' + latest;
-                    const loc = recordId ? refNo + ' - ' + recordId : refNo;
-                    if (loc) {
-                        text += '  (' + loc + ')';
-                    }
-                    li.textContent = text;
-                    datesList.appendChild(li);
-                    shown++;
-                });
-
-                // Partial range: one of DateEarliest / DateLatest missing.
-                partial.forEach(function (e) {
-                    if (shown >= LIMIT) return;
-                    const refNo = e && e.refNo ? e.refNo : '';
-                    const recordId = e && e.recordId ? e.recordId : '';
-                    const have = e && e.have ? e.have : '';
-                    const missing = e && e.missing ? e.missing : '';
-                    const li = document.createElement('li');
-                    let text = 'Partial range: have ' + have + ', missing ' + missing;
-                    const loc = recordId ? refNo + ' - ' + recordId : refNo;
-                    if (loc) {
-                        text += '  (' + loc + ')';
-                    }
-                    li.textContent = text;
-                    datesList.appendChild(li);
-                    shown++;
-                });
-
-                if (count > shown) {
-                    const li = document.createElement('li');
-                    li.textContent = '...and ' + (count - shown) + ' more';
-                    datesList.appendChild(li);
-                }
-
-                datesBox.removeAttribute('hidden');
-            } else {
-                datesBox.setAttribute('hidden', '');
-            }
+            renderAlertBox(datesBox, datesList, lines, count);
         }
 
         // Levels to review. Warning only: CALM Level values not in AtoM's default
         // taxonomy — each is a candidate new term to add in AtoM, or a typo to fix
         // at source. Signal-only: nothing shown when every Level matches.
-        if (levelsBox && levelsList) {
+        {
             const levels = report.levels || {};
             const candidates = Array.isArray(levels.candidates) ? levels.candidates : [];
             const count = typeof levels.count === 'number' ? levels.count : candidates.length;
-
-            if (count > 0) {
-                levelsList.innerHTML = '';
-                candidates.slice(0, 20).forEach(function (c) {
-                    // "value ×N  (RefNo - RecordID)", with a casing note when the
-                    // value would match a default term but for its capitalisation.
-                    const value = c && c.value ? c.value : '';
-                    const n = c && typeof c.count === 'number' ? c.count : 0;
-                    const refNo = c && c.refNo ? c.refNo : '';
-                    const recordId = c && c.recordId ? c.recordId : '';
-                    const casingOnly = !!(c && c.casingOnly);
-
-                    const li = document.createElement('li');
-                    let text = value;
-                    if (n > 0) {
-                        text += ' ×' + n;
-                    }
-                    if (casingOnly) {
-                        text += ' (casing differs)';
-                    }
-                    const loc = recordId ? refNo + ' - ' + recordId : refNo;
-                    if (loc) {
-                        text += '  (' + loc + ')';
-                    }
-                    li.textContent = text;
-                    levelsList.appendChild(li);
-                });
-                if (candidates.length > 20) {
-                    const li = document.createElement('li');
-                    li.textContent = '...and ' + (candidates.length - 20) + ' more';
-                    levelsList.appendChild(li);
+            const lines = candidates.map(function (c) {
+                // "value ×N (casing differs)  (RefNo - RecordID)"
+                const value = c && c.value ? c.value : '';
+                const n = c && typeof c.count === 'number' ? c.count : 0;
+                const casingOnly = !!(c && c.casingOnly);
+                let text = value;
+                if (n > 0) {
+                    text += ' ×' + n;
                 }
-
-                levelsBox.removeAttribute('hidden');
-            } else {
-                levelsBox.setAttribute('hidden', '');
-            }
+                if (casingOnly) {
+                    text += ' (casing differs)';
+                }
+                const loc = locator(c && c.refNo, c && c.recordId);
+                if (loc) {
+                    text += '  (' + loc + ')';
+                }
+                return text;
+            });
+            renderAlertBox(levelsBox, levelsList, lines, count);
         }
 
         empty.setAttribute('hidden', '');
