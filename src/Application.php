@@ -13,6 +13,7 @@ use AtomTool\Report\Collisions;
 use AtomTool\Report\Coverage;
 use AtomTool\Report\CsvStructuralValidator;
 use AtomTool\Report\Dates;
+use AtomTool\Report\Levels;
 use AtomTool\Report\Orphans;
 use AtomTool\Report\ValidationResult;
 use AtomTool\Report\MappingDiagram;
@@ -377,6 +378,7 @@ final class Application
             $collisions = new Collisions();
             $orphans = new Orphans();
             $dates = new Dates();
+            $levels = new Levels();
 
             fputcsv($csv, $header, escape: '');
 
@@ -388,6 +390,7 @@ final class Application
                     $collisions->observe($record);
                     $orphans->observe($record);
                     $dates->observe($record);
+                    $levels->observe($record);
                     $mapped = $mapping->mapRecord($record);
                     $line = [];
                     foreach ($header as $column) {
@@ -411,6 +414,7 @@ final class Application
             $refNoCollisions = $collisions->summarise();
             $orphanReport = $orphans->summarise();
             $dateReport = $dates->summarise();
+            $levelReport = $levels->summarise();
             $ranAt = date('c');
             $report = [
                 'runId'        => $runId,
@@ -431,6 +435,7 @@ final class Application
                 'refNoCollisions' => $refNoCollisions,
                 'orphans'      => $orphanReport,
                 'dates'        => $dateReport,
+                'levels'       => $levelReport,
                 'mapping'      => [
                     'version'      => $mapping->version(),
                     'versionDate'  => $mapping->versionDate(),

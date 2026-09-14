@@ -126,6 +126,8 @@ document.querySelectorAll('.pipeline-selector').forEach(selector => {
     const orphansList = document.getElementById('preflight-orphans-list');
     const datesBox = document.getElementById('preflight-dates');
     const datesList = document.getElementById('preflight-dates-list');
+    const levelsBox = document.getElementById('preflight-levels');
+    const levelsList = document.getElementById('preflight-levels-list');
 
     if (!content || !empty || !arc || !pctEl || !summaryEl || !unmappedEl || !provenanceEl) {
         return;
@@ -371,6 +373,52 @@ document.querySelectorAll('.pipeline-selector').forEach(selector => {
                 datesBox.removeAttribute('hidden');
             } else {
                 datesBox.setAttribute('hidden', '');
+            }
+        }
+
+        // Levels to review. Warning only: CALM Level values not in AtoM's default
+        // taxonomy — each is a candidate new term to add in AtoM, or a typo to fix
+        // at source. Signal-only: nothing shown when every Level matches.
+        if (levelsBox && levelsList) {
+            const levels = report.levels || {};
+            const candidates = Array.isArray(levels.candidates) ? levels.candidates : [];
+            const count = typeof levels.count === 'number' ? levels.count : candidates.length;
+
+            if (count > 0) {
+                levelsList.innerHTML = '';
+                candidates.slice(0, 20).forEach(function (c) {
+                    // "value ×N  (RefNo - RecordID)", with a casing note when the
+                    // value would match a default term but for its capitalisation.
+                    const value = c && c.value ? c.value : '';
+                    const n = c && typeof c.count === 'number' ? c.count : 0;
+                    const refNo = c && c.refNo ? c.refNo : '';
+                    const recordId = c && c.recordId ? c.recordId : '';
+                    const casingOnly = !!(c && c.casingOnly);
+
+                    const li = document.createElement('li');
+                    let text = value;
+                    if (n > 0) {
+                        text += ' ×' + n;
+                    }
+                    if (casingOnly) {
+                        text += ' (casing differs)';
+                    }
+                    const loc = recordId ? refNo + ' - ' + recordId : refNo;
+                    if (loc) {
+                        text += '  (' + loc + ')';
+                    }
+                    li.textContent = text;
+                    levelsList.appendChild(li);
+                });
+                if (candidates.length > 20) {
+                    const li = document.createElement('li');
+                    li.textContent = '...and ' + (candidates.length - 20) + ' more';
+                    levelsList.appendChild(li);
+                }
+
+                levelsBox.removeAttribute('hidden');
+            } else {
+                levelsBox.setAttribute('hidden', '');
             }
         }
 

@@ -329,6 +329,18 @@ ob_start();
                         <ul id="preflight-dates-list" class="preflight-alert__list"></ul>
                     </div>
 
+                    <div id="preflight-levels" class="preflight-alert preflight-alert--warn" hidden>
+                        <div class="preflight-alert__head">
+                            <span class="material-symbols-rounded preflight-alert__icon preflight-alert__icon--warn">warning</span>
+                            <span>Levels to review (warning)</span>
+                        </div>
+                        <p class="preflight-alert__note">
+                            Level values not in AtoM's default taxonomy. Each is a candidate
+                            new term to add in AtoM, or a typo to fix at source in CALM.
+                        </p>
+                        <ul id="preflight-levels-list" class="preflight-alert__list"></ul>
+                    </div>
+
                     <div class="preflight-gonogo">
                         <h3 class="preflight-subhead">AtoM final validation</h3>
                         <div class="preflight-gonogo__row">
