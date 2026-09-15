@@ -97,6 +97,7 @@ final class CsvStructuralValidator
             $this->checkColumnCount($header, $rows),
             $this->checkEmptyRows($rows),
             $this->checkEventValues($header, $rows),
+            $this->checkLegacyIdUniqueness($header, $rows),
         ];
 
         $warnCount = 0;
@@ -283,6 +284,92 @@ final class CsvStructuralValidator
         }
         return new ValidationResult('Event Value Count Test', ValidationResult::INFO, $summary);
     }
+
+            /**
+         * Reproduces AtoM's "Rows with non-unique 'legacyId' values" check.
+         *
+         * AtoM requires legacyId to be unique across the CSV: it is the key it
+         * uses to wire up parentId and to match on re-import. When two rows share
+         * a legacyId, AtoM cannot tell them apart and blocks the import.
+         *
+         * Same shape of problem as our source-side Collisions report (two records
+         * become indistinguishable downstream), but observed on the OUTPUT CSV
+         * rather than the source XML, so it lives here.
+         *
+         * Empty legacyId values are skipped: AtoM auto-generates when blank and
+         * treating blanks as collisions would produce misleading noise.
+         *
+         * @param list<string>       $header
+         * @param list<list<string>> $rows
+         */
+        private function checkLegacyIdUniqueness(array $header, array $rows): ValidationResult
+        {
+            $index = array_flip($header);
+            if (!isset($index['legacyId'])) {
+                return new ValidationResult(
+                    'Legacy ID Uniqueness Test',
+                    ValidationResult::INFO,
+                    ['No legacyId column present; nothing to check.'],
+                );
+            }
+
+            $col = $index['legacyId'];
+
+            /** @var array<string, list<int>> $byValue value => list of CSV row numbers */
+            $byValue = [];
+            $rowNumber = 1; // header = row 1
+            foreach ($rows as $row) {
+                $rowNumber++;
+                $value = trim((string) ($row[$col] ?? ''));
+                if ($value === '') {
+                    continue;
+                }
+                $byValue[$value][] = $rowNumber;
+            }
+
+            $duplicates = array_filter($byValue, static fn (array $rowNums): bool => count($rowNums) > 1);
+            if ($duplicates === []) {
+                return new ValidationResult('Legacy ID Uniqueness Test', ValidationResult::INFO);
+            }
+
+            // Worst offenders (most repeats) first, tie-break by value for stability.
+            uksort($duplicates, static function (string $a, string $b) use ($duplicates): int {
+                return count($duplicates[$b]) <=> count($duplicates[$a]) ?: strcmp($a, $b);
+            });
+
+            $affectedRowCount = array_sum(array_map('count', $duplicates));
+
+            // Keep the details line readable on very noisy CSVs.
+            $maxShown = 20;
+            $detailLines = [];
+            $shown = 0;
+            foreach ($duplicates as $value => $rowNums) {
+                if ($shown >= $maxShown) {
+                    $detailLines[] = sprintf(
+                        '(+%d more duplicated legacyId values not shown)',
+                        count($duplicates) - $shown,
+                    );
+                    break;
+                }
+                $detailLines[] = sprintf(
+                    "legacyId '%s' appears on rows: %s",
+                    $value,
+                    implode(', ', $rowNums),
+                );
+                $shown++;
+            }
+
+            return new ValidationResult(
+                'Legacy ID Uniqueness Test',
+                ValidationResult::ERROR,
+                [sprintf(
+                    'Rows with non-unique legacyId values: %d (across %d distinct legacyId values)',
+                    $affectedRowCount,
+                    count($duplicates),
+                )],
+                $detailLines,
+            );
+        }
 
     // ---- Parsing / rendering ----------------------------------------------
 
