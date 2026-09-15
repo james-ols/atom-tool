@@ -396,13 +396,22 @@ document.querySelectorAll('.pipeline-selector').forEach(selector => {
             }
         }
 
-        // RefNo collision warning (only shown when collisions were found). One
-        // list line per raw RefNo variant, as "RefNo - RecordID".
+        // RefNo collision warning (only shown when collisions were found). Two
+        // kinds, both legacyId-clash errors:
+        //   1) Normalisation variants — one line per raw RefNo spelling that
+        //      normalises to the same key, as "RefNo - RecordID".
+        //   2) Duplicate RefNo — genuinely distinct CALM records sharing the
+        //      SAME RefNo. One line PER duplicate record, so each record's
+        //      RecordID is separately clickable, as "Duplicate RefNo - RecordID".
         {
             const col = report.refNoCollisions || {};
             const groups = Array.isArray(col.groups) ? col.groups : [];
+            const duplicates = Array.isArray(col.duplicates) ? col.duplicates : [];
+
             const lines = [];
             let total = 0;
+
+            // (1) Normalisation variants.
             groups.forEach(function (g) {
                 const variants = g && g.variants ? g.variants : {};
                 Object.keys(variants).forEach(function (refNo) {
@@ -414,6 +423,26 @@ document.querySelectorAll('.pipeline-selector').forEach(selector => {
                     });
                 });
             });
+
+            // (2) Duplicate RefNo: one line per offending record.
+            duplicates.forEach(function (d) {
+                const refNo = d && d.refNo ? d.refNo : '';
+                const ids = (d && Array.isArray(d.recordIds)) ? d.recordIds : [];
+                if (ids.length === 0) {
+                    // Duplicate detected but no RecordID to show (both blank).
+                    total++;
+                    lines.push({ text: 'Duplicate RefNo: ' + refNo, recordId: '' });
+                    return;
+                }
+                ids.forEach(function (recordId) {
+                    total++;
+                    lines.push({
+                        text: 'Duplicate RefNo: ' + refNo + ' - ' + recordId,
+                        recordId: recordId
+                    });
+                });
+            });
+
             renderAlertBox(collisionsBox, collisionsList, lines, total, currentRunId);
         }
 

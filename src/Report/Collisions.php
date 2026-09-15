@@ -4,33 +4,42 @@ declare(strict_types=1);
 namespace AtomTool\Report;
 
 /**
- * Detects RefNo collisions across a single run: two or more source records
- * whose RefNo is identical once a trailing slash is disregarded — e.g.
- * "XCP75/7" and "XCP75/7/". In CALM a trailing slash is sometimes a stray
- * separator and sometimes load-bearing (a genuinely different record), so
- * when both forms appear they collapse to the same normalised key and cannot
- * be told apart downstream (legacyId / parentId matching). This is almost
- * always a cataloguing error that must be FIXED AT SOURCE, not in the mapping.
+ * RefNo collision scanner. Detects TWO distinct problems, both of which cause an
+ * AtoM legacyId clash on import (legacyId is derived from RefNo):
  *
- * Deliberately narrow: RefNo only, trailing-slash only. If more collidable
- * fields or rules are needed later, generalise then — not before.
+ *   1) NORMALISATION collisions — one logical record reached by more than one
+ *      raw RefNo spelling that normalise to the same key (e.g. "XCP75/7" and
+ *      "XCP75/7/"). The fix is to tidy the RefNo spelling at source.
  *
- * Each variant carries its CALM RecordID — the internal record identifier from
- * the import, which is the only value that lets a cataloguer locate the exact
- * offending record at source.
+ *   2) DUPLICATE RefNo — two or more DISTINCT CALM records that genuinely share
+ *      the SAME RefNo. This is a real source-data error: AtoM cannot import two
+ *      records with the same legacyId. The only thing that tells the duplicates
+ *      apart is their RecordID, so each duplicate's RecordID is reported so a
+ *      cataloguer can open each record at source.
  *
- * Mechanism only: it groups raw RefNo values by their normalised key and
- * reports any group holding more than one DISTINCT raw value.
+ * Mechanism only: no customer-specific judgement lives here.
  */
 final class Collisions
 {
-    /** @var array<string, array<string,string>> normalised key => (raw RefNo => RecordID) */
+    /**
+     * Normalisation buckets: normalised key => (raw RefNo => first RecordID seen).
+     *
+     * @var array<string, array<string,string>>
+     */
     private array $groups = [];
 
     /**
+     * Every RecordID seen per raw (trimmed) RefNo, in first-seen order, used to
+     * detect genuine duplicate RefNos. A record with a blank RecordID is still
+     * counted (as an empty-string entry) so the duplicate is not hidden.
+     *
+     * @var array<string, list<string>>
+     */
+    private array $refNoRecordIds = [];
+
+    /**
      * Observe one parsed CALM record (childName => list<string>). Reads the
-     * record's RefNo (first value) and buckets it by its normalised key,
-     * remembering the record's RecordID for later reporting.
+     * record's RefNo (first value) and RecordID, feeding both collision checks.
      *
      * @param array<string, list<string>> $record
      */
@@ -40,13 +49,17 @@ final class Collisions
         if ($refNo === '') {
             return;
         }
+        $recordId = trim((string) (($record['RecordID'][0]) ?? ''));
+
+        // (2) Duplicate RefNo: remember EVERY record under this exact raw RefNo.
+        $this->refNoRecordIds[$refNo][] = $recordId;
+
+        // (1) Normalisation collision: bucket by the slash-normalised key,
+        // keeping the first RecordID seen for each raw spelling.
         $key = rtrim($refNo, '/');
         if ($key === '') {
             return;
         }
-        $recordId = trim((string) (($record['RecordID'][0]) ?? ''));
-
-        // Keep the first RecordID seen for a given raw RefNo.
         $this->groups[$key][$refNo] ??= $recordId;
     }
 
@@ -55,15 +68,17 @@ final class Collisions
      *
      * @return array{
      *   count:int,
-     *   groups:list<array{normalised:string,variants:array<string,string>}>
+     *   groups:list<array{normalised:string,variants:array<string,string>}>,
+     *   duplicateCount:int,
+     *   duplicates:list<array{refNo:string,recordIds:list<string>}>
      * }
      */
     public function summarise(): array
     {
+        // (1) Normalisation collisions: same normalised key reached by more than
+        // one DISTINCT raw RefNo spelling.
         $out = [];
         foreach ($this->groups as $key => $variants) {
-            // A collision is when the same normalised key was reached by more
-            // than one DISTINCT raw RefNo (e.g. with and without trailing '/').
             if (count($variants) > 1) {
                 $out[] = [
                     'normalised' => (string) $key,
@@ -71,13 +86,38 @@ final class Collisions
                 ];
             }
         }
-
-        // Stable, useful order: worst offenders (most variants) first.
         usort($out, static fn (array $a, array $b): int => count($b['variants']) <=> count($a['variants']));
 
+        // (2) Duplicate RefNo: same exact RefNo carried by two or more records.
+        // Report each distinct RecordID (deduplicated, first-seen order) so the
+        // cataloguer can open each offending record at source.
+        $dupes = [];
+        foreach ($this->refNoRecordIds as $refNo => $recordIds) {
+            if (count($recordIds) < 2) {
+                continue;
+            }
+            $distinct = [];
+            foreach ($recordIds as $id) {
+                if (!in_array($id, $distinct, true)) {
+                    $distinct[] = $id;
+                }
+            }
+            // A genuine duplicate is two or more RECORDS on the same RefNo. Even
+            // if their RecordIDs happen to be blank/identical, it is still a
+            // legacyId clash, so report it (the RecordID list just may be short).
+            $dupes[] = [
+                'refNo'     => (string) $refNo,
+                'recordIds' => $distinct,
+            ];
+        }
+        // Worst offenders (most records sharing the RefNo) first.
+        usort($dupes, static fn (array $a, array $b): int => count($b['recordIds']) <=> count($a['recordIds']));
+
         return [
-            'count'  => count($out),
-            'groups' => $out,
+            'count'          => count($out),
+            'groups'         => $out,
+            'duplicateCount' => count($dupes),
+            'duplicates'     => $dupes,
         ];
     }
 }
